@@ -152,7 +152,7 @@ public class MainActivity extends Activity {
         fxControls.setGravity(Gravity.CENTER);
         transport.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(126)));
 
-        RotaryKnob levelKnob = new RotaryKnob(this, "FX LEVEL", 0f, 1f, "%", value -> {
+        RotaryKnob levelKnob = new RotaryKnob(this, "SCENE FX", 0f, 1f, "%", value -> {
             fxLevel = value;
             sendFxParameter(0, value);
         });
