@@ -150,7 +150,7 @@ public final class DspProcessor {
             if (gain < 0.999f) {
                 envelopesL[band] += (Math.abs(input) - envelopesL[band]) * 0.025f;
                 float threshold = 0.012f + (1f - gain) * 0.22f;
-                if (envelopes[band] < threshold) value = 0f;
+                if (envelopesL[band] < threshold) value = 0f;
             } else if (gain > 1.0001f) {
                 float drive = 1f + (gain - 1f) * 8f;
                 value = softClip(value * drive) / softClip(drive);
