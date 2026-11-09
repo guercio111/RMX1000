@@ -300,9 +300,19 @@ public class MainActivity extends Activity {
 
     private void updateSceneHint() {
         if (sceneHint == null) return;
-        String[] names = {"BPF ECHO", "ECHO", "NOISE", "SPIRAL UP", "REVERB UP",
-                "HPF ECHO", "LPF ECHO", "CRUSH ECHO", "SPIRAL DOWN", "REVERB DOWN"};
-        sceneHint.setText(fxMode < 0 ? "SCENE FX OFF" : names[fxMode] + "  •  ATTIVO");
+        String[] descriptions = {
+                "BPF ECHO  •  SUB 1: DELAY  /  SUB 2: BANDA",
+                "ECHO  •  SUB 1: DELAY  /  SUB 2: FEEDBACK",
+                "NOISE  •  SUB 1: QUANTITÀ  /  SUB 2: COLORE",
+                "SPIRAL UP  •  SUB 1: TEMPO  /  SUB 2: MODULAZIONE",
+                "REVERB UP  •  SUB 1: CODA  /  SUB 2: TONO",
+                "HPF ECHO  •  SUB 1: DELAY  /  SUB 2: TAGLIO",
+                "LPF ECHO  •  SUB 1: DELAY  /  SUB 2: TAGLIO",
+                "CRUSH ECHO  •  SUB 1: DELAY  /  SUB 2: CRUSH",
+                "SPIRAL DOWN  •  SUB 1: TEMPO  /  SUB 2: MODULAZIONE",
+                "REVERB DOWN  •  SUB 1: CODA  /  SUB 2: TONO"
+        };
+        sceneHint.setText(fxMode < 0 ? "SCENE FX OFF" : descriptions[fxMode]);
     }
 
     private void selectIsolateMode(int selected) {
