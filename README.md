@@ -1,4 +1,4 @@
-# RMX-1000 Audio Test 0.6.3
+# RMX-1000 Audio Test 0.6.4
 
 Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 
@@ -34,8 +34,16 @@ GitHub Actions builds the debug APK on pushes to `main`.
 - The v0.6.1 adaptive timing and repeat-buffer behavior are intentionally unchanged in this diagnostic build.
 
 
-## v0.6.3 — Stable clock estimate
+## v0.6.4 — Stable clock estimate
 - Adds a five-estimate rolling median to the low-band tempo tracker, reducing BPM estimate jitter from isolated extra bass attacks.
 - Uses a slower 8% correction toward the median estimate.
 - Keeps adaptive beat phase/re-alignment behavior, effect algorithms, audio routing, and capture engine unchanged from v0.6.2.
 - This conservative refinement must be checked on real tracks, especially after a track change.
+
+
+## v0.6.4 — Tempo-change follow
+- Preserves the five-estimate median and slow correction for small tempo movements.
+- Adds a separate challenger path for larger tempo changes: a new tempo must be supported by three consistent onset intervals before replacing the previous estimate.
+- Clears interval/challenger history after a long low-band onset gap (3 seconds), useful when playback pauses or a new track starts, while retaining the last BPM as the next starting point.
+- The audio routing, effect processing, UI controls, and stable-clock smoothing are otherwise unchanged.
+- Real-track listening tests are still required; low-frequency onset analysis can remain ambiguous on sparse or syncopated material.
