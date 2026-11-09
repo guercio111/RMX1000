@@ -36,8 +36,6 @@ public class MainActivity extends Activity {
     private final Button[] sceneFxButtons = new Button[10];
     private TextView sceneHint;
     private final Button[] isolateModeButtons = new Button[4];
-    private final Button[] beatDivisionButtons = new Button[6];
-    private int selectedBeatDivision = 1; // default: 1/2 beat, close to the previous delay setting
     private TextView rangeNote;
     private boolean fxEnabled = false;
     private boolean captureStarted = false;
@@ -203,31 +201,6 @@ public class MainActivity extends Activity {
         sub2Knob.setValue(fxSub2);
         fxControls.addView(sub2Knob, new LinearLayout.LayoutParams(0, -1, 1f));
 
-        TextView beatDivisionTitle = new TextView(this);
-        beatDivisionTitle.setText("DELAY DIVISION  •  SUB 1 = FINE TRIM");
-        beatDivisionTitle.setTextColor(0xFFFFC928);
-        beatDivisionTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        beatDivisionTitle.setGravity(Gravity.CENTER);
-        transport.addView(beatDivisionTitle, new LinearLayout.LayoutParams(-1, dp(18)));
-
-        LinearLayout beatDivisionRow = new LinearLayout(this);
-        beatDivisionRow.setOrientation(LinearLayout.HORIZONTAL);
-        beatDivisionRow.setGravity(Gravity.CENTER);
-        transport.addView(beatDivisionRow, new LinearLayout.LayoutParams(-1, dp(34)));
-        String[] beatLabels = {"1/4", "1/2", "3/4", "1", "2", "4"};
-        for (int i = 0; i < beatLabels.length; i++) {
-            final int selected = i;
-            Button beatButton = makeButton(beatLabels[i], Color.rgb(70, 73, 80));
-            beatButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-            beatButton.setPadding(0, 0, 0, 0);
-            beatButton.setOnClickListener(v -> selectBeatDivision(selected));
-            beatDivisionButtons[i] = beatButton;
-            LinearLayout.LayoutParams beatParams = new LinearLayout.LayoutParams(0, dp(30), 1f);
-            beatParams.setMargins(dp(2), 0, dp(2), 0);
-            beatDivisionRow.addView(beatButton, beatParams);
-        }
-        updateBeatDivisionButtons();
-
         LinearLayout isolatePanel = new LinearLayout(this);
         isolatePanel.setOrientation(LinearLayout.VERTICAL);
         isolatePanel.setGravity(Gravity.CENTER);
@@ -320,27 +293,6 @@ public class MainActivity extends Activity {
             tempoReceiverRegistered = false;
         }
         super.onStop();
-    }
-
-    private void selectBeatDivision(int selected) {
-        if (selected < 0 || selected >= beatDivisionButtons.length) return;
-        selectedBeatDivision = selected;
-        updateBeatDivisionButtons();
-        if (captureStarted) {
-            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_BEAT_DIVISION);
-            i.putExtra(CaptureService.EXTRA_BEAT_DIVISION, selectedBeatDivision);
-            startService(i);
-        }
-    }
-
-    private void updateBeatDivisionButtons() {
-        for (int i = 0; i < beatDivisionButtons.length; i++) {
-            Button button = beatDivisionButtons[i];
-            if (button != null) {
-                button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
-                        selectedBeatDivision == i ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
-            }
-        }
     }
 
     private void sendFxParameter(int parameter, float value) {
@@ -483,7 +435,6 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_FX_LEVEL, fxLevel);
         service.putExtra(CaptureService.EXTRA_FX_SUB1, fxSub1);
         service.putExtra(CaptureService.EXTRA_FX_SUB2, fxSub2);
-        service.putExtra(CaptureService.EXTRA_BEAT_DIVISION, selectedBeatDivision);
         service.putExtra(CaptureService.EXTRA_MODE, fxMode);
         service.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
         service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);
