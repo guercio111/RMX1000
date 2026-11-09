@@ -119,8 +119,9 @@ public final class DspProcessor {
     }
 
     private float bandGain(float setting) {
-        if (setting < 0f) return (float)Math.pow(10.0, (setting * 60.0) / 20.0);
-        return (float)Math.pow(10.0, (setting * 6.0) / 20.0);
+        // Wide, smooth attenuation for cuts; restrained boost to preserve headroom.
+        if (setting < 0f) return (float)Math.pow(10.0, (setting * 48.0) / 20.0);
+        return (float)Math.pow(10.0, (setting * 3.0) / 20.0);
     }
 
     public void process(short[] pcm, int samples) {
@@ -279,8 +280,8 @@ public final class DspProcessor {
             if (repeatPosition >= REPEAT_SAMPLES) repeatPosition = 0;
             frameCounter++;
             rhythmPhase++;
-            pcm[i] = (short)(clamp(finalL) * 32767f);
-            pcm[i + 1] = (short)(clamp(finalR) * 32767f);
+            pcm[i] = (short)(softKnee(finalL) * 32767f);
+            pcm[i + 1] = (short)(softKnee(finalR) * 32767f);
         }
     }
 
@@ -381,7 +382,7 @@ public final class DspProcessor {
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain < 1f) value = input * gain;
-            else if (gain > 1.0001f) value += repeatL[band][repeatReadPosition()] * Math.min(0.65f, (gain - 1f) * 2.2f);
+            else if (gain > 1.0001f) value += repeatL[band][repeatReadPosition()] * Math.min(0.22f, (gain - 1f) * 0.80f);
             repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
@@ -392,7 +393,7 @@ public final class DspProcessor {
                 float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
-                value += repeatL[band][repeatReadPosition()] * Math.min(0.8f, (gain - 1f) * 3.0f);
+                value += repeatL[band][repeatReadPosition()] * Math.min(0.24f, (gain - 1f) * 0.90f);
                 repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.35f;
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
@@ -444,6 +445,16 @@ public final class DspProcessor {
         int read = repeatPosition - delay;
         if (read < 0) read += REPEAT_SAMPLES;
         return read;
+    }
+
+    // Gentle peak control after the three crossover bands are recombined.
+    // It preserves normal dynamics and avoids harsh clipping on strong boosts.
+    private float softKnee(float value) {
+        float magnitude = Math.abs(value);
+        if (magnitude <= 0.78f) return value;
+        float excess = magnitude - 0.78f;
+        float shaped = 0.78f + 0.17f * (excess / (excess + 0.17f));
+        return Math.copySign(Math.min(0.95f, shaped), value);
     }
 
     private float softClip(float x) { return x / (1f + Math.abs(x)); }
