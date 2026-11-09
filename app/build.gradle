@@ -8,7 +8,7 @@ android {
         applicationId 'it.rmx1000.test'
         minSdk 29
         targetSdk 35
-        versionCode 14
-        versionName '0.9.0-scene-fx'
+        versionCode 16
+        versionName '1.0.1-isolator-headroom'
     }
 }
