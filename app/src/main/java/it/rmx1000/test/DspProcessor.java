@@ -176,7 +176,7 @@ public final class DspProcessor {
                     float damp = 0.04f + fxSub2 * 0.75f;
                     sceneLpL += (reverbL - sceneLpL) * damp;
                     sceneLpR += (reverbR - sceneLpR) * damp;
-                    if (mode == MODE_REVERB_UP || mode == MODE_SPIRAL_UP) {
+                    if (mode == MODE_REVERB || mode == MODE_SPIRAL_UP) {
                         // Brighter, rising reverb: emphasize the upper tail.
                         sceneHpL += (sceneLpL - sceneHpL) * 0.045f;
                         sceneHpR += (sceneLpR - sceneHpR) * 0.045f;
