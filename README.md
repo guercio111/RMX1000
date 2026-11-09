@@ -1,4 +1,4 @@
-# RMX-1000 Audio Test 0.6.1
+# RMX-1000 Audio Test 0.6.2
 
 Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 
@@ -26,3 +26,9 @@ Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 
 ## Build
 GitHub Actions builds the debug APK on pushes to `main`.
+
+
+## v0.6.2 — Clock monitor
+- Adds a lightweight on-screen BPM estimate, refreshed twice per second, so real-track clock stability can be checked without changing the DSP timing algorithm.
+- The displayed BPM is an estimate from low-band transients, not a guaranteed beat-grid or phase-lock indicator.
+- The v0.6.1 adaptive timing and repeat-buffer behavior are intentionally unchanged in this diagnostic build.
