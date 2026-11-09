@@ -27,10 +27,8 @@ public class CaptureService extends Service {
     public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
     public static final String ACTION_TEMPO = "it.rmx1000.test.TEMPO";
     public static final String ACTION_FX_PARAM = "it.rmx1000.test.FX_PARAM";
-    public static final String ACTION_BEAT_DIVISION = "it.rmx1000.test.BEAT_DIVISION";
     public static final String EXTRA_BPM = "estimated_bpm";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
-    public static final String EXTRA_BEAT_DIVISION = "beat_division";
     public static final String EXTRA_FX_LEVEL = "fx_level";
     public static final String EXTRA_FX_SUB1 = "fx_sub1";
     public static final String EXTRA_FX_SUB2 = "fx_sub2";
@@ -74,10 +72,6 @@ public class CaptureService extends Service {
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, -1));
             return START_NOT_STICKY;
         }
-        if (ACTION_BEAT_DIVISION.equals(action)) {
-            dsp.setBeatDivision(intent.getIntExtra(EXTRA_BEAT_DIVISION, 1));
-            return START_NOT_STICKY;
-        }
         if (ACTION_FX_PARAM.equals(action)) {
             int parameter = intent.getIntExtra(EXTRA_FX_PARAM, 0);
             float value = intent.getFloatExtra(EXTRA_VALUE, 0.55f);
@@ -97,7 +91,6 @@ public class CaptureService extends Service {
             dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
             dsp.setFxSub1(intent.getFloatExtra(EXTRA_FX_SUB1, 0.50f));
             dsp.setFxSub2(intent.getFloatExtra(EXTRA_FX_SUB2, 0.50f));
-            dsp.setBeatDivision(intent.getIntExtra(EXTRA_BEAT_DIVISION, 1));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, -1));
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, -1));
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
