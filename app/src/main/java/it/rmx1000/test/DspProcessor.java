@@ -59,6 +59,11 @@ public final class DspProcessor {
     public int getIsolateMode() { return isolateMode; }
     public void setEnabled(boolean value) { enabled = value; }
 
+    /** Current quarter-note estimate, intended for a lightweight UI diagnostic. */
+    public float getEstimatedBpm() {
+        return 2880000f / Math.max(1L, beatSamples);
+    }
+
     /** Reset rhythmic phase and repeat memory at the beginning of a new capture. */
     public void resetRhythm() {
         frameCounter = 0L;
