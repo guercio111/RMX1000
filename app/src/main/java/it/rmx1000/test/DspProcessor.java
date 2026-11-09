@@ -27,12 +27,8 @@ public final class DspProcessor {
     private volatile float fxLevel = 0.55f;
     private volatile float fxSub1 = 0.50f;
     private volatile float fxSub2 = 0.50f;
-    // Delay divisions are quarter-note beat counts: 1/4, 1/2, 3/4, 1, 2, 4.
-    private static final float[] BEAT_DIVISIONS = {0.25f, 0.50f, 0.75f, 1.0f, 2.0f, 4.0f};
-    private volatile int beatDivisionIndex = 1;
     private volatile int isolateMode = -1;
-    // Eight seconds of stereo delay memory supports up to 4 beats plus SUB 1 fine trim at 60 BPM.
-    private final float[] echo = new float[48000 * 2 * 8];
+    private final float[] echo = new float[48000 * 2 * 2];
     private int echoPosition;
     // Dedicated dual-head granular delay for the SPIRAL pitch sweep.
     private static final int SPIRAL_GRAIN = 4096;
@@ -97,9 +93,6 @@ public final class DspProcessor {
     public void setFxLevel(float value) { fxLevel = Math.max(0f, Math.min(1f, value)); }
     public void setFxSub1(float value) { fxSub1 = Math.max(0f, Math.min(1f, value)); }
     public void setFxSub2(float value) { fxSub2 = Math.max(0f, Math.min(1f, value)); }
-    public void setBeatDivision(int value) {
-        if (value >= 0 && value < BEAT_DIVISIONS.length) beatDivisionIndex = value;
-    }
 
     /** Current quarter-note estimate, intended for a lightweight UI diagnostic. */
     public float getEstimatedBpm() {
@@ -207,13 +200,10 @@ public final class DspProcessor {
                     outL = left + wetL * amount * 1.55f;
                     outR = right + wetR * amount * 1.55f;
                 } else {
-                    // The beat buttons select a musical division; SUB 1 trims around it.
-                    // At the knob midpoint (0.50) the selected division is exact.
-                    // NOISE keeps SUB 1 as its volume control, so its delay follows the selected division directly.
-                    float selectedDivision = BEAT_DIVISIONS[beatDivisionIndex];
-                    float delayTrim = 0.50f + fxSub1;
-                    float delayFraction = selectedDivision * delayTrim;
-                    if (mode == MODE_NOISE) delayFraction = selectedDivision;
+                    // SUB 1 controls the beat-synchronised echo repeat interval.
+                    // SCENE FX independently controls the spiral's granular delay time.
+                    float delayFraction = 0.125f + fxSub1 * 0.875f;
+                    if (mode == MODE_NOISE) delayFraction = 0.25f; // NOISE SUB 1 is volume, not delay.
                     int delayFrames = (int)(beatSamples * delayFraction);
                     delayFrames = Math.max(1500, Math.min(echo.length / 2 - 1, delayFrames));
 
