@@ -92,7 +92,21 @@ public final class DspProcessor {
     }
 
     public void setMode(int value) {
-        if (value >= -1 && value <= MODE_REVERB_DOWN) mode = value;
+        if (value < -1 || value > MODE_REVERB_DOWN || mode == value) return;
+        int previous = mode;
+        mode = value;
+        // Do not carry a previous Scene FX tail into a different algorithm.
+        // This avoids stacking unrelated delay states when the user changes FX.
+        java.util.Arrays.fill(echo, 0f);
+        echoPosition = 0;
+        if (previous == MODE_SPIRAL_UP || previous == MODE_SPIRAL_DOWN ||
+                value == MODE_SPIRAL_UP || value == MODE_SPIRAL_DOWN) {
+            java.util.Arrays.fill(spiralBuffer, 0f);
+            spiralPosition = 0;
+        }
+        sceneLpL = sceneLpR = sceneHpL = sceneHpR = 0f;
+        crushHoldL = crushHoldR = 0f;
+        crushCounter = 0;
     }
     public void setIsolateMode(int value) {
         if (value == -1 || (value >= ISOLATE_ISOLATOR && value <= ISOLATE_GATE_DRIVE)) isolateMode = value;
@@ -340,8 +354,11 @@ public final class DspProcessor {
                     float delayedL = echo[read], delayedR = echo[read + 1];
 
                     // Musical feedback is fixed, so repeats attenuate instead of self-oscillating.
-                    float feedback = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.42f : 0.38f;
-                    if (mode == MODE_NOISE) feedback = 0.30f;
+                    float feedback = 0.38f;
+                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) feedback = 0.20f;
+                    else if (mode == MODE_HPF_ECHO) feedback = 0.18f;
+                    else if (mode == MODE_CRUSH_ECHO) feedback = 0.16f;
+                    else if (mode == MODE_NOISE) feedback = 0.30f;
                     echo[echoPosition] = clamp(inputL + delayedL * feedback);
                     echo[echoPosition + 1] = clamp(inputR + delayedR * feedback);
 
@@ -354,14 +371,18 @@ public final class DspProcessor {
                         outL = left * (1f - mix * 0.85f) + left * 0.15f + hpL * mix * 1.25f;
                         outR = right * (1f - mix * 0.85f) + right * 0.15f + hpR * mix * 1.25f;
                     } else {
-                        float wet = mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN ? 0.72f : 0.68f;
-                        if (mode == MODE_NOISE) wet = 0.65f;
+                        float wet = 0.68f;
+                        if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) wet = 0.46f;
+                        else if (mode == MODE_HPF_ECHO) wet = 0.44f;
+                        else if (mode == MODE_CRUSH_ECHO) wet = 0.42f;
+                        else if (mode == MODE_NOISE) wet = 0.65f;
                         outL = left + delayedL * wet;
                         outR = right + delayedR * wet;
                     }
                     if (mode == MODE_CRUSH_ECHO) {
-                        outL = softClip(outL * (1.05f + fxLevel * 0.55f));
-                        outR = softClip(outR * (1.05f + fxLevel * 0.55f));
+                        // Keep the crushed character without adding a second large gain stage.
+                        outL = softClip(outL * (1.0f + fxLevel * 0.25f));
+                        outR = softClip(outR * (1.0f + fxLevel * 0.25f));
                     }
                     echoPosition += 2; if (echoPosition >= echo.length) echoPosition = 0;
                 }
