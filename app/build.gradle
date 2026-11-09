@@ -8,7 +8,7 @@ android {
         applicationId 'it.rmx1000.test'
         minSdk 29
         targetSdk 35
-        versionCode 19
-        versionName '1.3.0-spiral-pitch'
+        versionCode 20
+        versionName '1.3.1-isolator-headroom'
     }
 }
