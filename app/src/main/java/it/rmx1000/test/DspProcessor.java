@@ -191,8 +191,13 @@ public final class DspProcessor {
                 } else {
                     // SUB 1 sets echo delay time in beat fractions (1/8 through 1 beat).
                     float delayFraction = 0.125f + fxSub1 * 0.875f;
-                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN)
-                        delayFraction = 0.125f + fxLevel * 0.875f; // SCENE FX = spiral delay
+                    if (mode == MODE_NOISE) delayFraction = 0.25f; // NOISE SUB 1 is volume, not delay.
+                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
+                        // Both controls remain active: SCENE FX shifts the spiral tap,
+                        // while SUB 1 sets the echo-repeat interval around that base.
+                        float spiralBase = 0.125f + fxLevel * 0.875f;
+                        delayFraction = 0.5f * (spiralBase + (0.125f + fxSub1 * 0.875f));
+                    }
                     int delayFrames = (int)(beatSamples * delayFraction);
                     delayFrames = Math.max(1500, Math.min(echo.length / 2 - 1, delayFrames));
 
