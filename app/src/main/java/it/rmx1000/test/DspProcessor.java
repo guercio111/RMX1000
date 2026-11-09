@@ -85,6 +85,11 @@ public final class DspProcessor {
     private boolean xpadWasTouchDown;
     private volatile boolean xpadActive;
     private int xpadActiveDivision = -1;
+    // X-PAD sample bank: 0 KICK, 1 SNARE, 2 CLAP, 3 HI HAT.
+    private volatile int xpadBank = 0;
+    private int xpadSampleAge = -1;
+    private long xpadNextTriggerFrame;
+    private float xpadKickPhase;
 
 
     public DspProcessor() {
@@ -122,6 +127,51 @@ public final class DspProcessor {
     public void setXpadTouch(boolean down, int divisionIndex) {
         xpadDivisionIndex = Math.max(0, Math.min(4, divisionIndex));
         xpadTouchDown = down;
+    }
+    public void setXpadBank(int bank) { xpadBank = Math.max(0, Math.min(3, bank)); }
+    private void triggerXpadSample() {
+        xpadSampleAge = 0;
+        xpadKickPhase = 0f;
+    }
+    private float renderXpadSample() {
+        if (xpadSampleAge < 0) return 0f;
+        int age = xpadSampleAge++;
+        float t = age / 48000f;
+        float value = 0f;
+        if (xpadBank == 0) { // KICK: short falling-pitch sine with a firm transient.
+            if (age < 11500) {
+                float frequency = 42f + 125f * (float)Math.exp(-t * 34f);
+                xpadKickPhase += (float)(2.0 * Math.PI) * frequency / 48000f;
+                float env = (float)Math.exp(-t * 10.5f);
+                float click = age < 420 ? (1f - age / 420f) * 0.20f : 0f;
+                value = ((float)Math.sin(xpadKickPhase) * env * 0.82f) + click;
+            }
+        } else if (xpadBank == 1) { // SNARE: filtered noise plus a light tonal body.
+            if (age < 9000) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float env = (float)Math.exp(-t * 17f);
+                value = noise * env * 0.48f + (float)Math.sin(2.0 * Math.PI * 185f * t) * env * 0.16f;
+            }
+        } else if (xpadBank == 2) { // CLAP: three compact noise bursts.
+            if (age < 10500) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float burst = (float)Math.exp(-Math.abs(t - 0.006f) * 420f)
+                        + 0.72f * (float)Math.exp(-Math.abs(t - 0.021f) * 300f)
+                        + 0.48f * (float)Math.exp(-Math.abs(t - 0.037f) * 260f);
+                value = noise * burst * (float)Math.exp(-t * 5f) * 0.30f;
+            }
+        } else { // HI HAT: bright, short metallic noise.
+            if (age < 3600) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float env = (float)Math.exp(-t * 65f);
+                value = noise * env * 0.24f;
+            }
+        }
+        if (age > 12000) xpadSampleAge = -1;
+        return value;
     }
     private void captureXpadLoop(int divisionIndex) {
         final float[] beats = {0.125f, 0.25f, 0.5f, 1f, 2f};
@@ -208,6 +258,13 @@ public final class DspProcessor {
                 captureXpadLoop(xpadDivisionIndex);
             }
             if (xpadWasTouchDown && !xpadTouchDown && !xpadHold) xpadActive = false;
+            if (xpadTouchDown && (!xpadWasTouchDown || frameCounter >= xpadNextTriggerFrame)) {
+                triggerXpadSample();
+                long[] beatDivisors = {8L, 4L, 2L, 1L, 1L};
+                long interval = Math.max(1L, beatSamples / beatDivisors[xpadDivisionIndex]);
+                if (xpadDivisionIndex == 4) interval = beatSamples * 2L;
+                xpadNextTriggerFrame = frameCounter + interval;
+            }
             xpadWasTouchDown = xpadTouchDown;
 
 
@@ -395,6 +452,10 @@ public final class DspProcessor {
                 xpadLoopPosition++;
                 if (xpadLoopPosition >= xpadLoopFrames) xpadLoopPosition = 0;
             }
+            // Percussion samples are mixed over the captured music, not substituted for it.
+            float padSample = renderXpadSample();
+            outL = clamp(outL + padSample);
+            outR = clamp(outR + padSample * 0.985f);
 
             lowGain += (lowTargetGain - lowGain) * 0.0012f;
             midGain += (midTargetGain - midGain) * 0.0012f;
