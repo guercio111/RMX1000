@@ -55,27 +55,27 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(20), dp(12), dp(20), dp(12));
+        root.setPadding(dp(12), dp(8), dp(12), dp(8));
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 1.3.1");
+        title.setText("PIONEER  RMX-1000");
         title.setTextColor(Color.WHITE);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 22);
         title.setGravity(Gravity.CENTER);
         root.addView(title, new LinearLayout.LayoutParams(-1, dp(42)));
 
         status = new TextView(this);
         status.setText("Pronto. Avvia la cattura mentre Morphe sta riproducendo musica.");
         status.setTextColor(Color.LTGRAY);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         status.setGravity(Gravity.CENTER);
         root.addView(status, new LinearLayout.LayoutParams(-1, dp(48)));
 
         tempoView = new TextView(this);
         tempoView.setText("CLOCK  — BPM");
         tempoView.setTextColor(0xFFFFC928);
-        tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         tempoView.setGravity(Gravity.CENTER);
         root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(32)));
 
@@ -86,7 +86,9 @@ public class MainActivity extends Activity {
         LinearLayout transport = new LinearLayout(this);
         transport.setOrientation(LinearLayout.VERTICAL);
         transport.setGravity(Gravity.CENTER);
-        content.addView(transport, new LinearLayout.LayoutParams(dp(285), -1));
+        transport.setPadding(dp(8), dp(5), dp(8), dp(5));
+        transport.setBackgroundColor(Color.rgb(31, 33, 38));
+        content.addView(transport, new LinearLayout.LayoutParams(dp(360), -1));
 
         Button start = makeButton("START AUDIO CAPTURE", Color.rgb(35, 145, 80));
         start.setOnClickListener(v -> {
@@ -94,7 +96,13 @@ public class MainActivity extends Activity {
                 requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
             } else requestCaptureConsent();
         });
-        transport.addView(start, buttonParams());
+        LinearLayout captureRow = new LinearLayout(this);
+        captureRow.setOrientation(LinearLayout.HORIZONTAL);
+        captureRow.setGravity(Gravity.CENTER);
+        transport.addView(captureRow, new LinearLayout.LayoutParams(-1, dp(42)));
+        LinearLayout.LayoutParams captureButtonParams = new LinearLayout.LayoutParams(0, dp(38), 1f);
+        captureButtonParams.setMargins(dp(3), 0, dp(3), 0);
+        captureRow.addView(start, captureButtonParams);
 
         Button stop = makeButton("STOP", Color.rgb(165, 48, 48));
         stop.setOnClickListener(v -> {
@@ -104,7 +112,9 @@ public class MainActivity extends Activity {
             status.setText("Arresto richiesto.");
             tempoView.setText("CLOCK  fermo");
         });
-        transport.addView(stop, buttonParams());
+        LinearLayout.LayoutParams stopParams = new LinearLayout.LayoutParams(0, dp(38), 0.55f);
+        stopParams.setMargins(dp(3), 0, dp(3), 0);
+        captureRow.addView(stop, stopParams);
 
         TextView sceneTitle = new TextView(this);
         sceneTitle.setText("SCENE FX");
@@ -118,7 +128,25 @@ public class MainActivity extends Activity {
         LinearLayout sceneGrid = new LinearLayout(this);
         sceneGrid.setOrientation(LinearLayout.HORIZONTAL);
         sceneGrid.setGravity(Gravity.CENTER);
-        transport.addView(sceneGrid, new LinearLayout.LayoutParams(-1, dp(202)));
+        LinearLayout groupLabels = new LinearLayout(this);
+        groupLabels.setOrientation(LinearLayout.HORIZONTAL);
+        groupLabels.setGravity(Gravity.CENTER);
+        transport.addView(groupLabels, new LinearLayout.LayoutParams(-1, dp(24)));
+        TextView buildLabel = new TextView(this);
+        buildLabel.setText("BUILD UP");
+        buildLabel.setTextColor(0xFF35D477);
+        buildLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        buildLabel.setGravity(Gravity.CENTER);
+        buildLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+        groupLabels.addView(buildLabel, new LinearLayout.LayoutParams(0, -1, 1f));
+        TextView breakLabel = new TextView(this);
+        breakLabel.setText("BREAK DOWN");
+        breakLabel.setTextColor(0xFFFFC928);
+        breakLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        breakLabel.setGravity(Gravity.CENTER);
+        breakLabel.setTypeface(null, android.graphics.Typeface.BOLD);
+        groupLabels.addView(breakLabel, new LinearLayout.LayoutParams(0, -1, 1f));
+        transport.addView(sceneGrid, new LinearLayout.LayoutParams(-1, dp(190)));
         for (int column = 0; column < 2; column++) {
             LinearLayout buttonColumn = new LinearLayout(this);
             buttonColumn.setOrientation(LinearLayout.VERTICAL);
@@ -188,21 +216,25 @@ public class MainActivity extends Activity {
         isolateTitle.setGravity(Gravity.CENTER);
         isolatePanel.addView(isolateTitle, new LinearLayout.LayoutParams(-1, dp(34)));
 
-        LinearLayout isolateSelectRow = new LinearLayout(this);
-        isolateSelectRow.setOrientation(LinearLayout.HORIZONTAL);
-        isolateSelectRow.setGravity(Gravity.CENTER);
-        isolatePanel.addView(isolateSelectRow, new LinearLayout.LayoutParams(-1, dp(48)));
+        LinearLayout isolateSelectGrid = new LinearLayout(this);
+        isolateSelectGrid.setOrientation(LinearLayout.VERTICAL);
+        isolatePanel.addView(isolateSelectGrid, new LinearLayout.LayoutParams(-1, dp(88)));
         String[] isolateNames = {"ISOLATOR", "CUT / ADD", "TRANS / ROLL", "GATE / DRIVE"};
-        for (int mode = 0; mode < isolateNames.length; mode++) {
-            final int selected = mode;
-            Button selector = makeButton(isolateNames[mode], Color.rgb(70, 73, 80));
-            selector.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-            selector.setOnClickListener(v -> selectIsolateMode(selected));
-            isolateModeButtons[mode] = selector;
-            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(42), 1f);
-            bp.leftMargin = dp(3);
-            bp.rightMargin = dp(3);
-            isolateSelectRow.addView(selector, bp);
+        for (int row = 0; row < 2; row++) {
+            LinearLayout isolateSelectRow = new LinearLayout(this);
+            isolateSelectRow.setOrientation(LinearLayout.HORIZONTAL);
+            isolateSelectRow.setGravity(Gravity.CENTER);
+            isolateSelectGrid.addView(isolateSelectRow, new LinearLayout.LayoutParams(-1, 0, 1f));
+            for (int column = 0; column < 2; column++) {
+                final int selected = row * 2 + column;
+                Button selector = makeButton(isolateNames[selected], Color.rgb(70, 73, 80));
+                selector.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+                selector.setOnClickListener(v -> selectIsolateMode(selected));
+                isolateModeButtons[selected] = selector;
+                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(38), 1f);
+                bp.setMargins(dp(3), dp(2), dp(3), dp(2));
+                isolateSelectRow.addView(selector, bp);
+            }
         }
         updateIsolateButtons();
 
