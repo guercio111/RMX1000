@@ -125,6 +125,32 @@ public class MainActivity extends Activity {
         });
         transport.addView(modeButton, buttonParams());
 
+        TextView sceneTitle = new TextView(this);
+        sceneTitle.setText("SCENE FX  •  EFFECT AMOUNT");
+        sceneTitle.setTextColor(0xFFFFC928);
+        sceneTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        sceneTitle.setGravity(Gravity.CENTER);
+        transport.addView(sceneTitle, new LinearLayout.LayoutParams(-1, dp(30)));
+
+        LinearLayout fxControls = new LinearLayout(this);
+        fxControls.setOrientation(LinearLayout.HORIZONTAL);
+        fxControls.setGravity(Gravity.CENTER);
+        transport.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(126)));
+
+        RotaryKnob levelKnob = new RotaryKnob(this, "FX LEVEL", 0f, 1f, "%", value -> {
+            fxLevel = value;
+            sendFxParameter(0, value);
+        });
+        levelKnob.setValue(fxLevel);
+        fxControls.addView(levelKnob, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        RotaryKnob feedbackKnob = new RotaryKnob(this, "FEEDBACK", 0f, 1f, "%", value -> {
+            fxFeedback = value;
+            sendFxParameter(1, value);
+        });
+        feedbackKnob.setValue(fxFeedback);
+        fxControls.addView(feedbackKnob, new LinearLayout.LayoutParams(0, -1, 1f));
+
         isolateModeButton = makeButton("ISOLATE FX  /  ISOLATOR", Color.rgb(95, 80, 145));
         isolateModeButton.setOnClickListener(v -> {
             isolateMode = (isolateMode + 1) % 4;
@@ -169,25 +195,6 @@ public class MainActivity extends Activity {
         isolateHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         isolateHint.setGravity(Gravity.CENTER);
         isolatePanel.addView(isolateHint, new LinearLayout.LayoutParams(-1, dp(32)));
-
-        LinearLayout fxControls = new LinearLayout(this);
-        fxControls.setOrientation(LinearLayout.HORIZONTAL);
-        fxControls.setGravity(Gravity.CENTER);
-        isolatePanel.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(126)));
-
-        RotaryKnob levelKnob = new RotaryKnob(this, "FX LEVEL", 0f, 1f, "%", value -> {
-            fxLevel = value;
-            sendFxParameter(0, value);
-        });
-        levelKnob.setValue(fxLevel);
-        fxControls.addView(levelKnob, new LinearLayout.LayoutParams(0, -1, 1f));
-
-        RotaryKnob feedbackKnob = new RotaryKnob(this, "FEEDBACK", 0f, 1f, "%", value -> {
-            fxFeedback = value;
-            sendFxParameter(1, value);
-        });
-        feedbackKnob.setValue(fxFeedback);
-        fxControls.addView(feedbackKnob, new LinearLayout.LayoutParams(0, -1, 1f));
 
         LinearLayout knobs = new LinearLayout(this);
         knobs.setOrientation(LinearLayout.HORIZONTAL);
