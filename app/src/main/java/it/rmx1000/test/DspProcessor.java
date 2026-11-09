@@ -37,6 +37,11 @@ public final class DspProcessor {
     private final float[][] repeatR = new float[3][REPEAT_SAMPLES];
     private int repeatPosition;
     private long frameCounter;
+    // Adaptive beat tracker driven by low-band transients (kick/bass attacks).
+    private long beatSamples = 24000L; // 120 BPM fallback at 48 kHz
+    private long rhythmPhase;
+    private long lastOnsetFrame = -1L;
+    private float bassFast, bassSlow;
     private final float[] envelopesL = new float[3];
     private final float[] envelopesR = new float[3];
 
@@ -57,6 +62,10 @@ public final class DspProcessor {
     /** Reset rhythmic phase and repeat memory at the beginning of a new capture. */
     public void resetRhythm() {
         frameCounter = 0L;
+        rhythmPhase = 0L;
+        beatSamples = 24000L;
+        lastOnsetFrame = -1L;
+        bassFast = bassSlow = 0f;
         repeatPosition = 0;
         for (int band = 0; band < 3; band++) {
             java.util.Arrays.fill(repeatL[band], 0f);
@@ -126,6 +135,8 @@ public final class DspProcessor {
             float b1L = lowMidL - lowL, b1R = lowMidR - lowR;
             float b2L = outL - lowMidL, b2R = outR - lowMidR;
 
+            updateBeatTracker(b0L, b0R);
+
             float finalL = processBand(0, b0L, lowGain) +
                            processBand(1, b1L, midGain) +
                            processBand(2, b2L, highGain);
@@ -136,9 +147,47 @@ public final class DspProcessor {
             repeatPosition++;
             if (repeatPosition >= REPEAT_SAMPLES) repeatPosition = 0;
             frameCounter++;
+            rhythmPhase++;
             pcm[i] = (short)(clamp(finalL) * 32767f);
             pcm[i + 1] = (short)(clamp(finalR) * 32767f);
         }
+    }
+
+
+    /**
+     * Estimates quarter-note tempo from low-band attacks. It is intentionally
+     * conservative: 60-180 BPM, smoothed updates, and a 120 BPM fallback.
+     * This is an audio-onset tracker, not a guaranteed musical beat detector.
+     */
+    private void updateBeatTracker(float lowLeft, float lowRight) {
+        float bass = (Math.abs(lowLeft) + Math.abs(lowRight)) * 0.5f;
+        bassFast += (bass - bassFast) * (bass > bassFast ? 0.10f : 0.0025f);
+        bassSlow += (bass - bassSlow) * 0.00022f;
+
+        if (bassFast < 0.018f || bassFast < bassSlow * 1.65f) return;
+        if (lastOnsetFrame >= 0L && frameCounter - lastOnsetFrame < 8640L) return; // 180 ms guard
+
+        if (lastOnsetFrame >= 0L) {
+            long interval = frameCounter - lastOnsetFrame;
+            if (interval >= 9000L && interval <= 96000L) {
+                long best = beatSamples;
+                double bestError = Double.MAX_VALUE;
+                for (int multiply = 1; multiply <= 4; multiply++) {
+                    for (int divide = 1; divide <= 4; divide++) {
+                        long candidate = interval * multiply / divide;
+                        if (candidate < 16000L || candidate > 48000L) continue;
+                        double error = Math.abs(Math.log((double) candidate / (double) beatSamples));
+                        if (error < bestError) {
+                            bestError = error;
+                            best = candidate;
+                        }
+                    }
+                }
+                beatSamples += (long) ((best - beatSamples) * 0.12f);
+            }
+        }
+        lastOnsetFrame = frameCounter;
+        rhythmPhase = 0L;
     }
 
     private float processBand(int band, float input, float gain) {
@@ -149,10 +198,11 @@ public final class DspProcessor {
             repeatL[band][repeatPosition] = input + repeatL[band][repeatPosition] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
-                // Half-beat cycle at 120 BPM; deeper knob travel creates a longer cut.
-                long phase = frameCounter % 12000L;
+                // Half-beat gate follows the adaptive low-frequency beat tracker.
+                long cycle = Math.max(8000L, beatSamples / 2L);
+                long phase = rhythmPhase % cycle;
                 float cutAmount = Math.min(1f, 1f - gain);
-                float openFrames = 12000f * (0.88f - cutAmount * 0.38f);
+                float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
                 value += repeatL[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
@@ -178,9 +228,10 @@ public final class DspProcessor {
             repeatR[band][repeatPosition] = input + repeatR[band][repeatPosition] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
-                long phase = frameCounter % 12000L;
+                long cycle = Math.max(8000L, beatSamples / 2L);
+                long phase = rhythmPhase % cycle;
                 float cutAmount = Math.min(1f, 1f - gain);
-                float openFrames = 12000f * (0.88f - cutAmount * 0.38f);
+                float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
                 value += repeatR[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
