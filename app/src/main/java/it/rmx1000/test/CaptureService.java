@@ -22,10 +22,16 @@ public class CaptureService extends Service {
     public static final String ACTION_STOP = "it.rmx1000.test.STOP";
     public static final String ACTION_ECHO = "it.rmx1000.test.ECHO";
     public static final String ACTION_MODE = "it.rmx1000.test.MODE";
+    public static final String ACTION_ISOLATE = "it.rmx1000.test.ISOLATE";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
     public static final String EXTRA_MODE = "fx_mode";
+    public static final String EXTRA_BAND = "isolate_band";
+    public static final String EXTRA_VALUE = "isolate_value";
+    public static final String EXTRA_LOW = "isolate_low";
+    public static final String EXTRA_MID = "isolate_mid";
+    public static final String EXTRA_HIGH = "isolate_high";
     private static final String CHANNEL = "rmx_audio_capture";
     private static final int NOTIFICATION_ID = 1001;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -52,10 +58,17 @@ public class CaptureService extends Service {
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
             return START_NOT_STICKY;
         }
+        if (ACTION_ISOLATE.equals(action)) {
+            dsp.setIsolateBand(intent.getIntExtra(EXTRA_BAND, -1), intent.getFloatExtra(EXTRA_VALUE, 0f));
+            return START_NOT_STICKY;
+        }
         if (ACTION_START.equals(action) && !running.get()) {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
+            dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
+            dsp.setIsolateBand(1, intent.getFloatExtra(EXTRA_MID, 0f));
+            dsp.setIsolateBand(2, intent.getFloatExtra(EXTRA_HIGH, 0f));
             int code = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent data = intent.getParcelableExtra(EXTRA_DATA);
             try {
@@ -79,8 +92,7 @@ public class CaptureService extends Service {
         final int outMask = AudioFormat.CHANNEL_OUT_STEREO;
         AudioFormat inFormat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(inMask).build();
         AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(projection)
-                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
-                .build();
+                .addMatchingUsage(AudioAttributes.USAGE_MEDIA).build();
         int minIn = AudioRecord.getMinBufferSize(rate, inMask, AudioFormat.ENCODING_PCM_16BIT);
         int inBytes = Math.max(minIn * 2, 8192);
         recorder = new AudioRecord.Builder().setAudioFormat(inFormat).setBufferSizeInBytes(inBytes).setAudioPlaybackCaptureConfig(config).build();
