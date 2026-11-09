@@ -47,6 +47,9 @@ public final class DspProcessor {
     private final long[] tempoScratch = new long[5];
     private int tempoCandidateCount;
     private int tempoCandidatePosition;
+    // Separate confirmation path for genuine, sustained tempo changes.
+    private long challengerBeatSamples;
+    private int challengerCount;
     private final float[] envelopesL = new float[3];
     private final float[] envelopesR = new float[3];
 
@@ -78,6 +81,8 @@ public final class DspProcessor {
         bassFast = bassSlow = 0f;
         tempoCandidateCount = 0;
         tempoCandidatePosition = 0;
+        challengerBeatSamples = 0L;
+        challengerCount = 0;
         java.util.Arrays.fill(tempoCandidates, 24000L);
         java.util.Arrays.fill(tempoScratch, 24000L);
         repeatPosition = 0;
@@ -178,6 +183,16 @@ public final class DspProcessor {
         bassFast += (bass - bassFast) * (bass > bassFast ? 0.10f : 0.0025f);
         bassSlow += (bass - bassSlow) * 0.00022f;
 
+        // A long gap usually means silence or a track change. Keep the last BPM
+        // as a starting point, but discard interval history tied to the old track.
+        if (lastOnsetFrame >= 0L && frameCounter - lastOnsetFrame > 144000L) {
+            lastOnsetFrame = -1L;
+            tempoCandidateCount = 0;
+            tempoCandidatePosition = 0;
+            challengerBeatSamples = 0L;
+            challengerCount = 0;
+        }
+
         if (bassFast < 0.018f || bassFast < bassSlow * 1.65f) return;
         if (lastOnsetFrame >= 0L && frameCounter - lastOnsetFrame < 8640L) return; // 180 ms guard
 
@@ -197,25 +212,52 @@ public final class DspProcessor {
                         }
                     }
                 }
-                // Keep the last five interval-derived estimates and use their median.
-                // This filters isolated extra bass hits while still following tempo changes.
-                tempoCandidates[tempoCandidatePosition] = best;
-                tempoCandidatePosition = (tempoCandidatePosition + 1) % tempoCandidates.length;
-                if (tempoCandidateCount < tempoCandidates.length) tempoCandidateCount++;
 
-                for (int i = 0; i < tempoCandidateCount; i++) tempoScratch[i] = tempoCandidates[i];
-                // Insertion sort on a fixed field buffer: no per-audio-frame allocations.
-                for (int i = 1; i < tempoCandidateCount; i++) {
-                    long value = tempoScratch[i];
-                    int j = i - 1;
-                    while (j >= 0 && tempoScratch[j] > value) {
-                        tempoScratch[j + 1] = tempoScratch[j];
-                        j--;
+                // Small tempo movements use the stable five-value median.
+                // Larger movements must form a consistent three-hit challenger
+                // before replacing the old tempo, so one stray kick cannot jump the clock.
+                double deviation = Math.abs((double) best - (double) beatSamples) / (double) beatSamples;
+                if (deviation > 0.12) {
+                    double challengerDeviation = challengerBeatSamples == 0L ? Double.MAX_VALUE
+                            : Math.abs((double) best - (double) challengerBeatSamples) / (double) challengerBeatSamples;
+                    if (challengerDeviation > 0.08) {
+                        challengerBeatSamples = best;
+                        challengerCount = 1;
+                    } else {
+                        challengerBeatSamples += (best - challengerBeatSamples) / 3L;
+                        challengerCount++;
                     }
-                    tempoScratch[j + 1] = value;
+
+                    if (challengerCount >= 3) {
+                        beatSamples = challengerBeatSamples;
+                        java.util.Arrays.fill(tempoCandidates, beatSamples);
+                        tempoCandidateCount = 1;
+                        tempoCandidatePosition = 1;
+                        challengerBeatSamples = 0L;
+                        challengerCount = 0;
+                        rhythmPhase = 0L;
+                    }
+                } else {
+                    challengerBeatSamples = 0L;
+                    challengerCount = 0;
+                    tempoCandidates[tempoCandidatePosition] = best;
+                    tempoCandidatePosition = (tempoCandidatePosition + 1) % tempoCandidates.length;
+                    if (tempoCandidateCount < tempoCandidates.length) tempoCandidateCount++;
+
+                    for (int i = 0; i < tempoCandidateCount; i++) tempoScratch[i] = tempoCandidates[i];
+                    // Insertion sort on fixed buffers: no allocations in the audio thread.
+                    for (int i = 1; i < tempoCandidateCount; i++) {
+                        long value = tempoScratch[i];
+                        int j = i - 1;
+                        while (j >= 0 && tempoScratch[j] > value) {
+                            tempoScratch[j + 1] = tempoScratch[j];
+                            j--;
+                        }
+                        tempoScratch[j + 1] = value;
+                    }
+                    long median = tempoScratch[tempoCandidateCount / 2];
+                    beatSamples += (long) ((median - beatSamples) * 0.08f);
                 }
-                long median = tempoScratch[tempoCandidateCount / 2];
-                beatSamples += (long) ((median - beatSamples) * 0.08f);
             }
         }
         lastOnsetFrame = frameCounter;
