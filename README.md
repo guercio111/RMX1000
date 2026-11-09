@@ -1,4 +1,4 @@
-# RMX-1000 Audio Test 0.6
+# RMX-1000 Audio Test 0.6.1
 
 Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 
@@ -22,7 +22,7 @@ Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 - All DSP effects are original approximations, not Pioneer firmware, proprietary code or exact factory DSP curves.
 - Beat tracking is experimental and based on low-frequency transients, not full musical beat analysis. It can misread sparse kicks, syncopation, or strong bass notes; it is not guaranteed to lock to every track. Tempo is bounded to 60-180 BPM and falls back to 120 BPM.
 - This is an audio-engine prototype, not the finished RMX-1000 interface or complete effects set.
-- Version 0.3 capture and three-band Isolator were confirmed by the user on a Samsung SM-X230 / Android 16. The four Isolate FX modes in 0.4 were tested by the user. Version 0.5 was confirmed by the user. Version 0.6 adds experimental adaptive tempo tracking and requires listening tests.
+- Version 0.3 capture and three-band Isolator were confirmed by the user on a Samsung SM-X230 / Android 16. The four Isolate FX modes in 0.4 were tested by the user. Version 0.5 was confirmed by the user. Version 0.6.1 adds experimental adaptive tempo tracking, beat-adaptive repeat timing, and a corrected delay buffer for slower tempos; it requires listening tests.
 
 ## Build
 GitHub Actions builds the debug APK on pushes to `main`.
