@@ -238,7 +238,7 @@ public class MainActivity extends Activity {
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         TextView note = new TextView(this);
-        note.setText("Audio capture prototype: Android processes a copy; original audio may remain audible. Isolate FX is an original three-band approximation.");
+        note.setText("Audio capture prototype: Android processes a copy; original audio may remain audible. Scene FX and Isolate FX use original DSP approximations.");
         note.setTextColor(Color.GRAY);
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         note.setGravity(Gravity.CENTER);
