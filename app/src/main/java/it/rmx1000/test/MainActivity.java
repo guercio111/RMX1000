@@ -33,17 +33,18 @@ public class MainActivity extends Activity {
             }
         }
     };
-    private Button fxButton;
-    private Button modeButton;
+    private final Button[] sceneFxButtons = new Button[10];
+    private TextView sceneHint;
     private final Button[] isolateModeButtons = new Button[4];
     private TextView rangeNote;
-    private boolean fxEnabled = true;
+    private boolean fxEnabled = false;
     private boolean captureStarted = false;
-    private int fxMode = DspProcessor.MODE_ECHO;
+    private int fxMode = -1;
     private int isolateMode = -1;
     private final float[] isolate = {0f, 0f, 0f};
     private float fxLevel = 0.55f;
-    private float fxFeedback = 0.55f;
+    private float fxSub1 = 0.50f;
+    private float fxSub2 = 0.50f;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -58,7 +59,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.8.0");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.9.0");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -105,32 +106,46 @@ public class MainActivity extends Activity {
         });
         transport.addView(stop, buttonParams());
 
-        fxButton = makeButton("SCENE FX  ON", Color.rgb(190, 145, 25));
-        fxButton.setOnClickListener(v -> {
-            fxEnabled = !fxEnabled;
-            fxButton.setText(fxEnabled ? "SCENE FX  ON" : "SCENE FX  OFF");
-            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ECHO);
-            i.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
-            if (captureStarted) startService(i);
-        });
-        transport.addView(fxButton, buttonParams());
-
-        modeButton = makeButton("SCENE FX  /  ECHO", Color.rgb(40, 105, 165));
-        modeButton.setOnClickListener(v -> {
-            fxMode = (fxMode == DspProcessor.MODE_ECHO) ? DspProcessor.MODE_REVERB : DspProcessor.MODE_ECHO;
-            modeButton.setText(fxMode == DspProcessor.MODE_ECHO ? "SCENE FX  /  ECHO" : "SCENE FX  /  REVERB");
-            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_MODE);
-            i.putExtra(CaptureService.EXTRA_MODE, fxMode);
-            if (captureStarted) startService(i);
-        });
-        transport.addView(modeButton, buttonParams());
-
         TextView sceneTitle = new TextView(this);
-        sceneTitle.setText("SCENE FX  •  EFFECT AMOUNT");
+        sceneTitle.setText("SCENE FX");
         sceneTitle.setTextColor(0xFFFFC928);
-        sceneTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        sceneTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         sceneTitle.setGravity(Gravity.CENTER);
         transport.addView(sceneTitle, new LinearLayout.LayoutParams(-1, dp(30)));
+
+        String[] sceneNames = {"BPF ECHO", "ECHO", "NOISE", "SPIRAL UP", "REVERB UP",
+                "HPF ECHO", "LPF ECHO", "CRUSH ECHO", "SPIRAL DOWN", "REVERB DOWN"};
+        LinearLayout sceneGrid = new LinearLayout(this);
+        sceneGrid.setOrientation(LinearLayout.HORIZONTAL);
+        sceneGrid.setGravity(Gravity.CENTER);
+        transport.addView(sceneGrid, new LinearLayout.LayoutParams(-1, dp(202)));
+        for (int column = 0; column < 2; column++) {
+            LinearLayout buttonColumn = new LinearLayout(this);
+            buttonColumn.setOrientation(LinearLayout.VERTICAL);
+            buttonColumn.setGravity(Gravity.CENTER);
+            sceneGrid.addView(buttonColumn, new LinearLayout.LayoutParams(0, -1, 1f));
+            for (int row = 0; row < 5; row++) {
+                final int selected = column * 5 + row;
+                Button selector = makeButton(sceneNames[selected], Color.rgb(70, 73, 80));
+                selector.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+                selector.setOnClickListener(v -> selectSceneFx(selected));
+                sceneFxButtons[selected] = selector;
+                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, dp(36));
+                bp.leftMargin = dp(2);
+                bp.rightMargin = dp(2);
+                bp.topMargin = dp(2);
+                bp.bottomMargin = dp(2);
+                buttonColumn.addView(selector, bp);
+            }
+        }
+        updateSceneButtons();
+
+        sceneHint = new TextView(this);
+        sceneHint.setText("SELEZIONA UN EFFETTO SCENE FX");
+        sceneHint.setTextColor(Color.LTGRAY);
+        sceneHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        sceneHint.setGravity(Gravity.CENTER);
+        transport.addView(sceneHint, new LinearLayout.LayoutParams(-1, dp(26)));
 
         LinearLayout fxControls = new LinearLayout(this);
         fxControls.setOrientation(LinearLayout.HORIZONTAL);
@@ -144,12 +159,19 @@ public class MainActivity extends Activity {
         levelKnob.setValue(fxLevel);
         fxControls.addView(levelKnob, new LinearLayout.LayoutParams(0, -1, 1f));
 
-        RotaryKnob feedbackKnob = new RotaryKnob(this, "FEEDBACK", 0f, 1f, "%", value -> {
-            fxFeedback = value;
+        RotaryKnob sub1Knob = new RotaryKnob(this, "SUB 1", 0f, 1f, "%", value -> {
+            fxSub1 = value;
             sendFxParameter(1, value);
         });
-        feedbackKnob.setValue(fxFeedback);
-        fxControls.addView(feedbackKnob, new LinearLayout.LayoutParams(0, -1, 1f));
+        sub1Knob.setValue(fxSub1);
+        fxControls.addView(sub1Knob, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        RotaryKnob sub2Knob = new RotaryKnob(this, "SUB 2", 0f, 1f, "%", value -> {
+            fxSub2 = value;
+            sendFxParameter(2, value);
+        });
+        sub2Knob.setValue(fxSub2);
+        fxControls.addView(sub2Knob, new LinearLayout.LayoutParams(0, -1, 1f));
 
         LinearLayout isolatePanel = new LinearLayout(this);
         isolatePanel.setOrientation(LinearLayout.VERTICAL);
@@ -249,6 +271,40 @@ public class MainActivity extends Activity {
         startService(i);
     }
 
+    private void selectSceneFx(int selected) {
+        fxMode = (fxMode == selected) ? -1 : selected;
+        fxEnabled = fxMode >= 0;
+        updateSceneButtons();
+        updateSceneHint();
+        if (captureStarted) {
+            Intent enabled = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ECHO);
+            enabled.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
+            startService(enabled);
+            if (fxEnabled) {
+                Intent mode = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_MODE);
+                mode.putExtra(CaptureService.EXTRA_MODE, fxMode);
+                startService(mode);
+            }
+        }
+    }
+
+    private void updateSceneButtons() {
+        for (int i = 0; i < sceneFxButtons.length; i++) {
+            Button button = sceneFxButtons[i];
+            if (button != null) {
+                button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                        fxMode == i ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+            }
+        }
+    }
+
+    private void updateSceneHint() {
+        if (sceneHint == null) return;
+        String[] names = {"BPF ECHO", "ECHO", "NOISE", "SPIRAL UP", "REVERB UP",
+                "HPF ECHO", "LPF ECHO", "CRUSH ECHO", "SPIRAL DOWN", "REVERB DOWN"};
+        sceneHint.setText(fxMode < 0 ? "SCENE FX OFF" : names[fxMode] + "  •  ATTIVO");
+    }
+
     private void selectIsolateMode(int selected) {
         isolateMode = (isolateMode == selected) ? -1 : selected;
         updateIsolateButtons();
@@ -335,7 +391,8 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_DATA, data);
         service.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
         service.putExtra(CaptureService.EXTRA_FX_LEVEL, fxLevel);
-        service.putExtra(CaptureService.EXTRA_FX_FEEDBACK, fxFeedback);
+        service.putExtra(CaptureService.EXTRA_FX_SUB1, fxSub1);
+        service.putExtra(CaptureService.EXTRA_FX_SUB2, fxSub2);
         service.putExtra(CaptureService.EXTRA_MODE, fxMode);
         service.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
         service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);
@@ -344,7 +401,7 @@ public class MainActivity extends Activity {
         try {
             startForegroundService(service);
             captureStarted = true;
-            status.setText("Cattura avviata. Seleziona ISOLATE FX e regola LOW / MID / HI dal centro neutro.");
+            status.setText("Cattura avviata. Seleziona SCENE FX o ISOLATE FX.");
         } catch (Exception e) {
             captureStarted = false;
             status.setText("Avvio non riuscito: " + e.getClass().getSimpleName());
