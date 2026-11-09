@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
     private boolean xpadRoll = false, xpadHold = false, xpadTouch = false;
     private int xpadDivision = 2;
     private int xpadBank = -1;
-    private final Button[] xpadBankButtons = new Button[4];
+    private final Button[] xpadBankButtons = new Button[5];
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -102,7 +102,7 @@ public class MainActivity extends Activity {
                 updateXpadButtons();
                 sendXpadState();
             });
-            if (slot > 0) xpadBankButtons[slot - 1] = bankButton;
+            xpadBankButtons[slot] = bankButton;
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(34), 1f);
             bp.setMargins(dp(2), 0, dp(2), 0);
             bankRow.addView(bankButton, bp);
@@ -401,7 +401,7 @@ public class MainActivity extends Activity {
                 android.content.res.ColorStateList.valueOf(xpadHold ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
         for (int i = 0; i < xpadBankButtons.length; i++) {
             if (xpadBankButtons[i] != null) xpadBankButtons[i].setBackgroundTintList(
-                    android.content.res.ColorStateList.valueOf(xpadBank == i ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+                    android.content.res.ColorStateList.valueOf(xpadBank == i - 1 ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
         }
     }
 
