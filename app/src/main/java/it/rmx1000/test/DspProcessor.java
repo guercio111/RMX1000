@@ -82,7 +82,8 @@ public final class DspProcessor {
     private int xpadHistoryPosition, xpadLoopFrames, xpadLoopPosition;
     private volatile boolean xpadRoll, xpadHold, xpadTouchDown;
     private volatile int xpadDivisionIndex = 2;
-    private boolean xpadWasTouchDown, xpadActive;
+    private boolean xpadWasTouchDown;
+    private volatile boolean xpadActive;
     private int xpadActiveDivision = -1;
 
 
@@ -189,7 +190,7 @@ public final class DspProcessor {
             xpadHistoryPosition += 2;
             if (xpadHistoryPosition >= xpadHistory.length) xpadHistoryPosition = 0;
             if (xpadRoll && xpadTouchDown &&
-                    (!xpadWasTouchDown || xpadActiveDivision != xpadDivisionIndex)) {
+                    (!xpadActive || !xpadWasTouchDown || xpadActiveDivision != xpadDivisionIndex)) {
                 captureXpadLoop(xpadDivisionIndex);
             }
             if (xpadWasTouchDown && !xpadTouchDown && !xpadHold) xpadActive = false;
