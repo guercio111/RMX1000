@@ -123,7 +123,9 @@ public final class DspProcessor {
                 float feedback = 0.05f + fxFeedback * 0.60f;
                 echo[echoPosition] = clamp(left + wetL * feedback);
                 echo[echoPosition + 1] = clamp(right + wetR * feedback);
-                float dry = 1f - fxLevel * 0.3273f;
+                // FX LEVEL controls only the delayed signal. Keep the source
+                // at unity so increasing the effect cannot make the mix seem quieter.
+                float dry = 1f;
                 float wet = fxLevel * 0.8727f;
                 outL = left * dry + wetL * wet;
                 outR = right * dry + wetR * wet;
@@ -146,7 +148,8 @@ public final class DspProcessor {
                 }
                 lpLeft += (sumL * 0.25f - lpLeft) * 0.42f;
                 lpRight += (sumR * 0.25f - lpRight) * 0.42f;
-                float dry = 1f - fxLevel * 0.40f;
+                // Preserve the original signal; FX LEVEL raises only the reverb return.
+                float dry = 1f;
                 float wet = fxLevel * 0.7636f;
                 outL = left * dry + lpLeft * wet;
                 outR = right * dry + lpRight * wet;
