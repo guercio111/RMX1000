@@ -15,6 +15,7 @@ import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
+import android.os.SystemClock;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class CaptureService extends Service {
@@ -24,6 +25,8 @@ public class CaptureService extends Service {
     public static final String ACTION_MODE = "it.rmx1000.test.MODE";
     public static final String ACTION_ISOLATE = "it.rmx1000.test.ISOLATE";
     public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
+    public static final String ACTION_TEMPO = "it.rmx1000.test.TEMPO";
+    public static final String EXTRA_BPM = "estimated_bpm";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
@@ -124,12 +127,20 @@ public class CaptureService extends Service {
     private void audioLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
         short[] pcm = new short[1024];
+        long lastTempoBroadcast = 0L;
         try {
             while (running.get()) {
                 int n = recorder.read(pcm, 0, pcm.length, AudioRecord.READ_BLOCKING);
                 if (n <= 0) { if (n == AudioRecord.ERROR_DEAD_OBJECT) break; continue; }
                 int usable = n - (n % 2);
                 dsp.process(pcm, usable);
+                long now = SystemClock.uptimeMillis();
+                if (now - lastTempoBroadcast >= 500L) {
+                    Intent tempo = new Intent(ACTION_TEMPO).setPackage(getPackageName());
+                    tempo.putExtra(EXTRA_BPM, dsp.getEstimatedBpm());
+                    sendBroadcast(tempo);
+                    lastTempoBroadcast = now;
+                }
                 int offset = 0;
                 while (offset < usable && running.get()) {
                     int written = player.write(pcm, offset, usable - offset, AudioTrack.WRITE_BLOCKING);
