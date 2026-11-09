@@ -8,7 +8,6 @@ import android.content.pm.PackageManager;
 import android.Manifest;
 import android.os.Bundle;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -21,7 +20,9 @@ public class MainActivity extends Activity {
     private MediaProjectionManager projectionManager;
     private TextView status;
     private Button echoButton;
+    private Button modeButton;
     private boolean echoEnabled = true;
+    private int fxMode = DspProcessor.MODE_ECHO;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -37,7 +38,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.1");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.2");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25);
         title.setGravity(Gravity.CENTER);
@@ -70,18 +71,28 @@ public class MainActivity extends Activity {
         });
         root.addView(stop, buttonParams());
 
-        echoButton = makeButton("ECHO  ON", Color.rgb(190, 145, 25));
+        echoButton = makeButton("FX  ON", Color.rgb(190, 145, 25));
         echoButton.setOnClickListener(v -> {
             echoEnabled = !echoEnabled;
-            echoButton.setText(echoEnabled ? "ECHO  ON" : "ECHO  OFF");
+            echoButton.setText(echoEnabled ? "FX  ON" : "FX  OFF");
             Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ECHO);
             i.putExtra(CaptureService.EXTRA_ENABLED, echoEnabled);
             startService(i);
         });
         root.addView(echoButton, buttonParams());
 
+        modeButton = makeButton("SCENE FX  /  ECHO", Color.rgb(40, 105, 165));
+        modeButton.setOnClickListener(v -> {
+            fxMode = (fxMode == DspProcessor.MODE_ECHO) ? DspProcessor.MODE_REVERB : DspProcessor.MODE_ECHO;
+            modeButton.setText(fxMode == DspProcessor.MODE_ECHO ? "SCENE FX  /  ECHO" : "SCENE FX  /  REVERB");
+            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_MODE);
+            i.putExtra(CaptureService.EXTRA_MODE, fxMode);
+            startService(i);
+        });
+        root.addView(modeButton, buttonParams());
+
         TextView note = new TextView(this);
-        note.setText("TEST TECNICO: Android cattura una copia dell'audio. Il segnale originale potrebbe restare udibile insieme a quello elaborato. Uscita stereo 48 kHz, Echo fisso 250 ms.");
+        note.setText("TEST TECNICO 0.2: cattura una copia dell'audio. Il segnale originale potrebbe restare udibile. Scene FX sperimentali: Echo e Reverb.");
         note.setTextColor(Color.GRAY);
         note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         note.setGravity(Gravity.CENTER);
@@ -131,6 +142,7 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode);
         service.putExtra(CaptureService.EXTRA_DATA, data);
         service.putExtra(CaptureService.EXTRA_ENABLED, echoEnabled);
+        service.putExtra(CaptureService.EXTRA_MODE, fxMode);
         try {
             startForegroundService(service);
             status.setText("Autorizzazione ricevuta. Avvio motore audio…");
