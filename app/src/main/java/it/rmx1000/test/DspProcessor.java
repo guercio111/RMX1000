@@ -24,7 +24,7 @@ public final class DspProcessor {
     private static final float LOW_ALPHA = 0.0323f;  // about 250 Hz at 48 kHz
     private static final float HIGH_ALPHA = 0.279f;  // about 2.5 kHz at 48 kHz
     private float lowL, lowR, lowMidL, lowMidR;
-    private volatile float lowSetting, midSetting, highSetting;
+    private volatile float lowTargetGain = 1f, midTargetGain = 1f, highTargetGain = 1f;
     private float lowGain = 1f, midGain = 1f, highGain = 1f;
 
     public DspProcessor() {
@@ -40,9 +40,9 @@ public final class DspProcessor {
     /** band: 0=LOW, 1=MID, 2=HIGH; setting range -1..+1, center is flat. */
     public void setIsolateBand(int band, float setting) {
         float v = Math.max(-1f, Math.min(1f, setting));
-        if (band == 0) lowSetting = v;
-        else if (band == 1) midSetting = v;
-        else if (band == 2) highSetting = v;
+        if (band == 0) lowTargetGain = bandGain(v);
+        else if (band == 1) midTargetGain = bandGain(v);
+        else if (band == 2) highTargetGain = bandGain(v);
     }
 
     private float bandGain(float setting) {
@@ -89,9 +89,9 @@ public final class DspProcessor {
                 outR = right * 0.78f + lpRight * 0.42f;
             }
 
-            float targetLow = bandGain(lowSetting);
-            float targetMid = bandGain(midSetting);
-            float targetHigh = bandGain(highSetting);
+            float targetLow = lowTargetGain;
+            float targetMid = midTargetGain;
+            float targetHigh = highTargetGain;
             // Smooth control movement over a few milliseconds to prevent zipper noise.
             lowGain += (targetLow - lowGain) * 0.0012f;
             midGain += (targetMid - midGain) * 0.0012f;
