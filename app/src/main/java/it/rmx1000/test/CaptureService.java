@@ -27,6 +27,7 @@ public class CaptureService extends Service {
     public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
     public static final String ACTION_TEMPO = "it.rmx1000.test.TEMPO";
     public static final String ACTION_FX_PARAM = "it.rmx1000.test.FX_PARAM";
+    public static final String ACTION_XPAD = "it.rmx1000.test.XPAD";
     public static final String EXTRA_BPM = "estimated_bpm";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
     public static final String EXTRA_FX_LEVEL = "fx_level";
@@ -42,6 +43,10 @@ public class CaptureService extends Service {
     public static final String EXTRA_LOW = "isolate_low";
     public static final String EXTRA_MID = "isolate_mid";
     public static final String EXTRA_HIGH = "isolate_high";
+    public static final String EXTRA_XPAD_ROLL = "xpad_roll";
+    public static final String EXTRA_XPAD_HOLD = "xpad_hold";
+    public static final String EXTRA_XPAD_TOUCH = "xpad_touch";
+    public static final String EXTRA_XPAD_DIVISION = "xpad_division";
     private static final String CHANNEL = "rmx_audio_capture";
     private static final int NOTIFICATION_ID = 1001;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -80,6 +85,13 @@ public class CaptureService extends Service {
             else if (parameter == 2) dsp.setFxSub2(value);
             return START_NOT_STICKY;
         }
+        if (ACTION_XPAD.equals(action)) {
+            dsp.setXpadRoll(intent.getBooleanExtra(EXTRA_XPAD_ROLL, false));
+            dsp.setXpadHold(intent.getBooleanExtra(EXTRA_XPAD_HOLD, false));
+            dsp.setXpadTouch(intent.getBooleanExtra(EXTRA_XPAD_TOUCH, false),
+                    intent.getIntExtra(EXTRA_XPAD_DIVISION, 2));
+            return START_NOT_STICKY;
+        }
         if (ACTION_ISOLATE.equals(action)) {
             dsp.setIsolateBand(intent.getIntExtra(EXTRA_BAND, -1), intent.getFloatExtra(EXTRA_VALUE, 0f));
             return START_NOT_STICKY;
@@ -96,6 +108,9 @@ public class CaptureService extends Service {
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
             dsp.setIsolateBand(1, intent.getFloatExtra(EXTRA_MID, 0f));
             dsp.setIsolateBand(2, intent.getFloatExtra(EXTRA_HIGH, 0f));
+            dsp.setXpadRoll(intent.getBooleanExtra(EXTRA_XPAD_ROLL, false));
+            dsp.setXpadHold(intent.getBooleanExtra(EXTRA_XPAD_HOLD, false));
+            dsp.setXpadTouch(false, intent.getIntExtra(EXTRA_XPAD_DIVISION, 2));
             int code = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent data = intent.getParcelableExtra(EXTRA_DATA);
             try {
