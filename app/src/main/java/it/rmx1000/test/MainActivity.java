@@ -19,10 +19,12 @@ public class MainActivity extends Activity {
     private static final int REQUEST_AUDIO_PERMISSION = 7002;
     private MediaProjectionManager projectionManager;
     private TextView status;
-    private Button echoButton;
+    private Button fxButton;
     private Button modeButton;
-    private boolean echoEnabled = true;
+    private boolean fxEnabled = true;
+    private boolean captureStarted = false;
     private int fxMode = DspProcessor.MODE_ECHO;
+    private final float[] isolate = {0f, 0f, 0f};
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -33,53 +35,58 @@ public class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER);
-        root.setPadding(dp(28), dp(20), dp(28), dp(20));
+        root.setPadding(dp(20), dp(12), dp(20), dp(12));
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.2");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.3");
         title.setTextColor(Color.WHITE);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 25);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
-        root.addView(title, new LinearLayout.LayoutParams(-1, dp(54)));
+        root.addView(title, new LinearLayout.LayoutParams(-1, dp(42)));
 
         status = new TextView(this);
         status.setText("Pronto. Avvia la cattura mentre Morphe sta riproducendo musica.");
         status.setTextColor(Color.LTGRAY);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         status.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, dp(74));
-        sp.bottomMargin = dp(12);
-        root.addView(status, sp);
+        root.addView(status, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.HORIZONTAL);
+        content.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout transport = new LinearLayout(this);
+        transport.setOrientation(LinearLayout.VERTICAL);
+        transport.setGravity(Gravity.CENTER);
+        content.addView(transport, new LinearLayout.LayoutParams(dp(285), -1));
 
         Button start = makeButton("START AUDIO CAPTURE", Color.rgb(35, 145, 80));
         start.setOnClickListener(v -> {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
-            } else {
-                requestCaptureConsent();
-            }
+            } else requestCaptureConsent();
         });
-        root.addView(start, buttonParams());
+        transport.addView(start, buttonParams());
 
         Button stop = makeButton("STOP", Color.rgb(165, 48, 48));
         stop.setOnClickListener(v -> {
+            captureStarted = false;
             Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_STOP);
             startService(i);
             status.setText("Arresto richiesto.");
         });
-        root.addView(stop, buttonParams());
+        transport.addView(stop, buttonParams());
 
-        echoButton = makeButton("FX  ON", Color.rgb(190, 145, 25));
-        echoButton.setOnClickListener(v -> {
-            echoEnabled = !echoEnabled;
-            echoButton.setText(echoEnabled ? "FX  ON" : "FX  OFF");
+        fxButton = makeButton("SCENE FX  ON", Color.rgb(190, 145, 25));
+        fxButton.setOnClickListener(v -> {
+            fxEnabled = !fxEnabled;
+            fxButton.setText(fxEnabled ? "SCENE FX  ON" : "SCENE FX  OFF");
             Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ECHO);
-            i.putExtra(CaptureService.EXTRA_ENABLED, echoEnabled);
-            startService(i);
+            i.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
+            if (captureStarted) startService(i);
         });
-        root.addView(echoButton, buttonParams());
+        transport.addView(fxButton, buttonParams());
 
         modeButton = makeButton("SCENE FX  /  ECHO", Color.rgb(40, 105, 165));
         modeButton.setOnClickListener(v -> {
@@ -87,18 +94,71 @@ public class MainActivity extends Activity {
             modeButton.setText(fxMode == DspProcessor.MODE_ECHO ? "SCENE FX  /  ECHO" : "SCENE FX  /  REVERB");
             Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_MODE);
             i.putExtra(CaptureService.EXTRA_MODE, fxMode);
-            startService(i);
+            if (captureStarted) startService(i);
         });
-        root.addView(modeButton, buttonParams());
+        transport.addView(modeButton, buttonParams());
+
+        TextView isolateTitle = new TextView(this);
+        isolateTitle.setText("ISOLATE FX");
+        isolateTitle.setTextColor(0xFFFFC928);
+        isolateTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
+        isolateTitle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams itp = new LinearLayout.LayoutParams(-1, dp(38));
+        itp.topMargin = dp(3);
+        transport.addView(isolateTitle, itp);
+
+        TextView rangeNote = new TextView(this);
+        rangeNote.setText("Centro = 0 dB   |   Sinistra = CUT   |   Destra = +6 dB");
+        rangeNote.setTextColor(Color.LTGRAY);
+        rangeNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        rangeNote.setGravity(Gravity.CENTER);
+        transport.addView(rangeNote, new LinearLayout.LayoutParams(-1, dp(34)));
+
+        LinearLayout isolatePanel = new LinearLayout(this);
+        isolatePanel.setOrientation(LinearLayout.VERTICAL);
+        isolatePanel.setGravity(Gravity.CENTER);
+        isolatePanel.setBackgroundColor(Color.rgb(31, 33, 37));
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(0, -1, 1f);
+        ip.leftMargin = dp(14);
+        content.addView(isolatePanel, ip);
+
+        TextView isolateHint = new TextView(this);
+        isolateHint.setText("THREE-BAND ISOLATOR  •  TOUCH AND DRAG");
+        isolateHint.setTextColor(0xFFBFC4CA);
+        isolateHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        isolateHint.setGravity(Gravity.CENTER);
+        isolatePanel.addView(isolateHint, new LinearLayout.LayoutParams(-1, dp(38)));
+
+        LinearLayout knobs = new LinearLayout(this);
+        knobs.setOrientation(LinearLayout.HORIZONTAL);
+        knobs.setGravity(Gravity.CENTER);
+        isolatePanel.addView(knobs, new LinearLayout.LayoutParams(-1, 0, 1f));
+
+        String[] labels = {"LOW", "MID", "HIGH"};
+        for (int band = 0; band < 3; band++) {
+            final int index = band;
+            RotaryKnob knob = new RotaryKnob(this, labels[band], value -> {
+                isolate[index] = value;
+                if (captureStarted) {
+                    Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ISOLATE);
+                    i.putExtra(CaptureService.EXTRA_BAND, index);
+                    i.putExtra(CaptureService.EXTRA_VALUE, value);
+                    startService(i);
+                }
+            });
+            knob.setValue(isolate[band]);
+            knobs.addView(knob, new LinearLayout.LayoutParams(0, dp(210), 1f));
+        }
+
+        content.addView(new LinearLayout(this), new LinearLayout.LayoutParams(0, 1));
+        root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         TextView note = new TextView(this);
-        note.setText("TEST TECNICO 0.2: cattura una copia dell'audio. Il segnale originale potrebbe restare udibile. Scene FX sperimentali: Echo e Reverb.");
+        note.setText("Audio capture prototype: Android processes a copy; original audio may remain audible. Isolate FX is an original three-band approximation.");
         note.setTextColor(Color.GRAY);
-        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
         note.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams np = new LinearLayout.LayoutParams(-1, dp(70));
-        np.topMargin = dp(12);
-        root.addView(note, np);
+        root.addView(note, new LinearLayout.LayoutParams(-1, dp(28)));
         setContentView(root);
     }
 
@@ -106,14 +166,15 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(text);
         b.setTextColor(Color.WHITE);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         b.setAllCaps(false);
         b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(color));
         return b;
     }
     private LinearLayout.LayoutParams buttonParams() {
-        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(dp(360), dp(58));
-        p.topMargin = dp(5); p.bottomMargin = dp(5);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(-1, dp(52));
+        p.topMargin = dp(4);
+        p.bottomMargin = dp(4);
         return p;
     }
     private int dp(int v) { return (int)(v * getResources().getDisplayMetrics().density + 0.5f); }
@@ -141,12 +202,17 @@ public class MainActivity extends Activity {
         service.setAction(CaptureService.ACTION_START);
         service.putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode);
         service.putExtra(CaptureService.EXTRA_DATA, data);
-        service.putExtra(CaptureService.EXTRA_ENABLED, echoEnabled);
+        service.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
         service.putExtra(CaptureService.EXTRA_MODE, fxMode);
+        service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);
+        service.putExtra(CaptureService.EXTRA_MID, isolate[1]);
+        service.putExtra(CaptureService.EXTRA_HIGH, isolate[2]);
         try {
             startForegroundService(service);
-            status.setText("Autorizzazione ricevuta. Avvio motore audio…");
+            captureStarted = true;
+            status.setText("Cattura avviata. Regola LOW / MID / HIGH dal centro neutro.");
         } catch (Exception e) {
+            captureStarted = false;
             status.setText("Avvio non riuscito: " + e.getClass().getSimpleName());
         }
     }
