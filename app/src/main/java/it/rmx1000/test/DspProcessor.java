@@ -133,8 +133,12 @@ public final class DspProcessor {
         // Preserve strong cuts, but keep LOW/MID boosts gentler to avoid
         // exciting bass and low-mid resonances on tablet speakers/headphones.
         if (setting < 0f) return (float)Math.pow(10.0, (setting * 48.0) / 20.0);
-        float maxBoostDb = band == 0 ? 1.5f : (band == 1 ? 2.0f : 3.0f);
-        return (float)Math.pow(10.0, (setting * maxBoostDb) / 20.0);
+        // The positive half of the travel is deliberately progressive:
+        // the first half stays close to unity and the last half adds only a
+        // small, controlled lift. This avoids runaway energy with layered FX.
+        float maxBoostDb = band == 0 ? 1.0f : (band == 1 ? 1.2f : 2.0f);
+        float shaped = setting * setting;
+        return (float)Math.pow(10.0, (shaped * maxBoostDb) / 20.0);
     }
 
     public void process(short[] pcm, int samples) {
@@ -441,7 +445,7 @@ public final class DspProcessor {
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain < 1f) value = input * gain;
-            else if (gain > 1.0001f) value += repeatL[band][repeatReadPosition()] * Math.min(0.22f, (gain - 1f) * 0.80f);
+            else if (gain > 1.0001f) value += repeatL[band][repeatReadPosition()] * Math.min(0.055f, (gain - 1f) * 0.22f);
             repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
@@ -452,7 +456,7 @@ public final class DspProcessor {
                 float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
-                value += repeatL[band][repeatReadPosition()] * Math.min(0.24f, (gain - 1f) * 0.90f);
+                value += repeatL[band][repeatReadPosition()] * Math.min(0.060f, (gain - 1f) * 0.24f);
                 repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.35f;
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
@@ -461,8 +465,9 @@ public final class DspProcessor {
                 float threshold = 0.012f + (1f - gain) * 0.22f;
                 if (envelopesL[band] < threshold) value = 0f;
             } else if (gain > 1.0001f) {
-                float drive = 1f + (gain - 1f) * 8f;
-                value = softClip(value * drive) / softClip(drive);
+                float drive = 1f + Math.min(1.2f, (gain - 1f) * 4f);
+                // Drive adds harmonic density but must not act as a volume boost.
+                value = softClip(value * drive) / drive;
             }
         }
         return value;
