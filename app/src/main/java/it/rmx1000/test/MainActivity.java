@@ -52,6 +52,8 @@ public class MainActivity extends Activity {
     private Button xpadRollButton, xpadHoldButton;
     private boolean xpadRoll = false, xpadHold = false, xpadTouch = false;
     private int xpadDivision = 2;
+    private int xpadBank = 0;
+    private final Button[] xpadBankButtons = new Button[4];
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -85,6 +87,27 @@ public class MainActivity extends Activity {
         tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         tempoView.setGravity(Gravity.CENTER);
         root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(32)));
+
+        // Select a percussion bank; each pad touch adds that sound over the music.
+        LinearLayout bankRow = new LinearLayout(this);
+        bankRow.setOrientation(LinearLayout.HORIZONTAL);
+        bankRow.setGravity(Gravity.CENTER);
+        String[] bankNames = {"KICK", "SNARE", "CLAP", "HI HAT"};
+        for (int bank = 0; bank < bankNames.length; bank++) {
+            final int selectedBank = bank;
+            Button bankButton = makeButton(bankNames[bank], bank == 0 ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80));
+            bankButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            bankButton.setOnClickListener(v -> {
+                xpadBank = selectedBank;
+                updateXpadButtons();
+                sendXpadState();
+            });
+            xpadBankButtons[bank] = bankButton;
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(34), 1f);
+            bp.setMargins(dp(2), 0, dp(2), 0);
+            bankRow.addView(bankButton, bp);
+        }
+        root.addView(bankRow, new LinearLayout.LayoutParams(-1, dp(38)));
 
         // Pioneer X-PAD FX: five touch zones, from 1/8 to 2/1 beat.
         LinearLayout xpadPanel = new LinearLayout(this);
@@ -376,6 +399,10 @@ public class MainActivity extends Activity {
                 android.content.res.ColorStateList.valueOf(xpadRoll ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
         if (xpadHoldButton != null) xpadHoldButton.setBackgroundTintList(
                 android.content.res.ColorStateList.valueOf(xpadHold ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+        for (int i = 0; i < xpadBankButtons.length; i++) {
+            if (xpadBankButtons[i] != null) xpadBankButtons[i].setBackgroundTintList(
+                    android.content.res.ColorStateList.valueOf(xpadBank == i ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+        }
     }
 
     private void sendXpadState() {
@@ -385,6 +412,7 @@ public class MainActivity extends Activity {
         i.putExtra(CaptureService.EXTRA_XPAD_HOLD, xpadHold);
         i.putExtra(CaptureService.EXTRA_XPAD_TOUCH, xpadTouch);
         i.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
+        i.putExtra(CaptureService.EXTRA_XPAD_BANK, xpadBank);
         startService(i);
     }
 
@@ -529,6 +557,7 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_XPAD_HOLD, xpadHold);
         service.putExtra(CaptureService.EXTRA_XPAD_TOUCH, false);
         service.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
+        service.putExtra(CaptureService.EXTRA_XPAD_BANK, xpadBank);
         try {
             startForegroundService(service);
             captureStarted = true;
