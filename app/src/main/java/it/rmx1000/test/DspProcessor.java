@@ -34,8 +34,14 @@ public final class DspProcessor {
     private final int[] lengths = {1493, 1601, 1747, 1867};
     private final float[][] reverbLines = new float[4][];
     private final int[] reverbPositions = new int[4];
-    private float lpLeft, lpRight;
+    // Two short all-pass diffusers turn the comb network into a denser room tail.
+    private final float[] diffuser1L = new float[347], diffuser1R = new float[347];
+    private final float[] diffuser2L = new float[421], diffuser2R = new float[421];
+    private int diffuser1Position, diffuser2Position;
+    private float reverbDampL, reverbDampR;
     private float sceneLpL, sceneLpR, sceneHpL, sceneHpR;
+    private float noiseColorL, noiseColorR, crushHoldL, crushHoldR;
+    private int crushCounter;
     private int noiseState = 0x13579BDF;
 
     // Complementary crossovers: LOW + MID + HIGH reconstruct the input.
@@ -132,122 +138,152 @@ public final class DspProcessor {
             float outL = left, outR = right;
 
             if (enabled && mode >= 0) {
-                boolean reverbMode = mode == MODE_REVERB || mode == MODE_REVERB_DOWN
-                        || mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN;
-                boolean echoMode = mode == MODE_BPF_ECHO || mode == MODE_ECHO || mode == MODE_HPF_ECHO
-                        || mode == MODE_LPF_ECHO || mode == MODE_CRUSH_ECHO
-                        || mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN;
                 float inputL = left;
                 float inputR = right;
 
+                // Pure noise generator: SUB 1 controls amount, SUB 2 controls its color.
                 if (mode == MODE_NOISE) {
                     noiseState = noiseState * 1664525 + 1013904223;
-                    float noiseL = ((noiseState >>> 8) / 8388608f) - 1f;
+                    float nL = ((noiseState >>> 8) / 8388608f) - 1f;
                     noiseState = noiseState * 1664525 + 1013904223;
-                    float noiseR = ((noiseState >>> 8) / 8388608f) - 1f;
-                    float cutoff = 0.025f + fxSub2 * 0.30f;
-                    sceneLpL += (noiseL - sceneLpL) * cutoff;
-                    sceneLpR += (noiseR - sceneLpR) * cutoff;
-                    float bandL = sceneLpL - sceneHpL;
-                    float bandR = sceneLpR - sceneHpR;
-                    sceneHpL += (bandL - sceneHpL) * 0.018f;
-                    sceneHpR += (bandR - sceneHpR) * 0.018f;
-                    float noiseAmount = fxSub1 * fxLevel * 0.62f;
-                    outL = left + bandL * noiseAmount;
-                    outR = right + bandR * noiseAmount;
-                } else if (reverbMode) {
+                    float nR = ((noiseState >>> 8) / 8388608f) - 1f;
+                    float color = 0.025f + fxSub2 * 0.42f;
+                    noiseColorL += (nL - noiseColorL) * color;
+                    noiseColorR += (nR - noiseColorR) * color;
+                    float coloredL = fxSub2 < 0.5f ? noiseColorL : nL - noiseColorL * 0.65f;
+                    float coloredR = fxSub2 < 0.5f ? noiseColorR : nR - noiseColorR * 0.65f;
+                    float amount = fxLevel * fxSub1 * 0.95f;
+                    outL = left + coloredL * amount;
+                    outR = right + coloredR * amount;
+                }
+                // Reverb uses a four-comb network followed by two all-pass stages.
+                else if (mode == MODE_REVERB || mode == MODE_REVERB_DOWN) {
                     float sumL = 0f, sumR = 0f;
+                    float decay = 0.48f + fxSub1 * 0.43f;
+                    float damping = 0.025f + fxSub2 * 0.32f;
                     for (int line = 0; line < reverbLines.length; line++) {
                         int p = reverbPositions[line];
-                        float a = reverbLines[line][p], b = reverbLines[line][p + 1];
-                        sumL += a; sumR += b;
-                        float crossL = (line % 2 == 0) ? right : left;
-                        float crossR = (line % 2 == 0) ? left : right;
-                        float decay = 0.58f + fxSub1 * 0.38f;
-                        float feedback = mode == MODE_REVERB_DOWN ? decay * 0.82f : decay;
-                        reverbLines[line][p] = clamp(left * 0.24f + a * feedback + crossL * 0.035f);
-                        reverbLines[line][p + 1] = clamp(right * 0.24f + b * feedback + crossR * 0.035f);
+                        float a = reverbLines[line][p];
+                        float b = reverbLines[line][p + 1];
+                        sumL += a;
+                        sumR += b;
+                        reverbDampL += (a - reverbDampL) * damping;
+                        reverbDampR += (b - reverbDampR) * damping;
+                        float crossL = (line & 1) == 0 ? right : left;
+                        float crossR = (line & 1) == 0 ? left : right;
+                        float feedback = mode == MODE_REVERB_DOWN ? decay * 0.88f : decay;
+                        reverbLines[line][p] = clamp(left * 0.22f + reverbDampL * feedback + crossL * 0.025f);
+                        reverbLines[line][p + 1] = clamp(right * 0.22f + reverbDampR * feedback + crossR * 0.025f);
                         p += 2;
                         if (p >= reverbLines[line].length) p = 0;
                         reverbPositions[line] = p;
                     }
-                    float reverbL = sumL * 0.25f;
-                    float reverbR = sumR * 0.25f;
-                    float damp = 0.04f + fxSub2 * 0.75f;
-                    sceneLpL += (reverbL - sceneLpL) * damp;
-                    sceneLpR += (reverbR - sceneLpR) * damp;
-                    if (mode == MODE_REVERB || mode == MODE_SPIRAL_UP) {
-                        // Brighter, rising reverb: emphasize the upper tail.
-                        sceneHpL += (sceneLpL - sceneHpL) * 0.045f;
-                        sceneHpR += (sceneLpR - sceneHpR) * 0.045f;
-                        reverbL = (sceneLpL - sceneHpL) * 1.65f;
-                        reverbR = (sceneLpR - sceneHpR) * 1.65f;
+                    float wetL = sumL * 0.25f;
+                    float wetR = sumR * 0.25f;
+                    // Schroeder-style all-pass diffusion; this softens discrete delay taps.
+                    float d1L = diffuser1L[diffuser1Position];
+                    float d1R = diffuser1R[diffuser1Position];
+                    float ap1L = -0.62f * wetL + d1L;
+                    float ap1R = -0.62f * wetR + d1R;
+                    diffuser1L[diffuser1Position] = wetL + 0.62f * ap1L;
+                    diffuser1R[diffuser1Position] = wetR + 0.62f * ap1R;
+                    diffuser1Position++;
+                    if (diffuser1Position >= diffuser1L.length) diffuser1Position = 0;
+
+                    float d2L = diffuser2L[diffuser2Position];
+                    float d2R = diffuser2R[diffuser2Position];
+                    float ap2L = -0.58f * ap1L + d2L;
+                    float ap2R = -0.58f * ap1R + d2R;
+                    diffuser2L[diffuser2Position] = ap1L + 0.58f * ap2L;
+                    diffuser2R[diffuser2Position] = ap1R + 0.58f * ap2R;
+                    diffuser2Position++;
+                    if (diffuser2Position >= diffuser2L.length) diffuser2Position = 0;
+
+                    // UP is bright and airy; DOWN is darker and warmer.
+                    float tone = fxSub2;
+                    if (mode == MODE_REVERB) {
+                        sceneHpL += (ap2L - sceneHpL) * (0.025f + tone * 0.18f);
+                        sceneHpR += (ap2R - sceneHpR) * (0.025f + tone * 0.18f);
+                        wetL = (ap2L - sceneHpL) * (1.0f + tone * 0.8f);
+                        wetR = (ap2R - sceneHpR) * (1.0f + tone * 0.8f);
                     } else {
-                        // Darker, falling reverb: keep the low/mid body and damp highs.
-                        reverbL = sceneLpL * 0.92f;
-                        reverbR = sceneLpR * 0.92f;
+                        sceneLpL += (ap2L - sceneLpL) * (0.015f + tone * 0.12f);
+                        sceneLpR += (ap2R - sceneLpR) * (0.015f + tone * 0.12f);
+                        wetL = sceneLpL * (1.35f - tone * 0.35f);
+                        wetR = sceneLpR * (1.35f - tone * 0.35f);
                     }
-                    float wet = fxLevel * ((mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.62f : 0.78f);
-                    outL = left + reverbL * wet;
-                    outR = right + reverbR * wet;
+                    float wet = fxLevel * 0.92f;
+                    outL = left + wetL * wet;
+                    outR = right + wetR * wet;
                 }
-
-                if (echoMode) {
+                // All delay-based modes share a clocked buffer, but each has its own
+                // input treatment and clearly audible parameter mapping.
+                else {
                     if (mode == MODE_BPF_ECHO) {
-                        float lp = 0.035f + fxSub2 * 0.32f;
+                        float lp = 0.025f + fxSub2 * 0.38f;
                         sceneLpL += (inputL - sceneLpL) * lp;
                         sceneLpR += (inputR - sceneLpR) * lp;
-                        sceneHpL += (sceneLpL - sceneHpL) * 0.055f;
-                        sceneHpR += (sceneLpR - sceneHpR) * 0.055f;
-                        inputL = sceneLpL - sceneHpL;
-                        inputR = sceneLpR - sceneHpR;
+                        sceneHpL += (sceneLpL - sceneHpL) * (0.018f + fxSub2 * 0.10f);
+                        sceneHpR += (sceneLpR - sceneHpR) * (0.018f + fxSub2 * 0.10f);
+                        inputL = (sceneLpL - sceneHpL) * 2.0f;
+                        inputR = (sceneLpR - sceneHpR) * 2.0f;
                     } else if (mode == MODE_HPF_ECHO) {
-                        float hp = 0.015f + fxSub2 * 0.28f;
-                        sceneLpL += (inputL - sceneLpL) * hp;
-                        sceneLpR += (inputR - sceneLpR) * hp;
-                        inputL -= sceneLpL;
-                        inputR -= sceneLpR;
+                        float cutoff = 0.008f + fxSub2 * 0.24f;
+                        sceneLpL += (inputL - sceneLpL) * cutoff;
+                        sceneLpR += (inputR - sceneLpR) * cutoff;
+                        inputL = (inputL - sceneLpL) * 1.7f;
+                        inputR = (inputR - sceneLpR) * 1.7f;
                     } else if (mode == MODE_LPF_ECHO) {
-                        float lp = 0.008f + fxSub2 * 0.20f;
-                        sceneLpL += (inputL - sceneLpL) * lp;
-                        sceneLpR += (inputR - sceneLpR) * lp;
-                        inputL = sceneLpL;
-                        inputR = sceneLpR;
+                        float cutoff = 0.008f + fxSub2 * 0.28f;
+                        sceneLpL += (inputL - sceneLpL) * cutoff;
+                        sceneLpR += (inputR - sceneLpR) * cutoff;
+                        inputL = sceneLpL * 1.7f;
+                        inputR = sceneLpR * 1.7f;
                     } else if (mode == MODE_CRUSH_ECHO) {
-                        int bits = 12 - (int)(fxSub2 * 7f);
+                        int bits = 12 - Math.round(fxSub2 * 8f);
                         float steps = (float)(1 << bits);
-                        inputL = Math.round(inputL * steps) / steps;
-                        inputR = Math.round(inputR * steps) / steps;
+                        int holdEvery = 1 + Math.round(fxSub2 * 9f);
+                        if (crushCounter % holdEvery == 0) {
+                            crushHoldL = Math.round(inputL * steps) / steps;
+                            crushHoldR = Math.round(inputR * steps) / steps;
+                        }
+                        inputL = crushHoldL;
+                        inputR = crushHoldR;
+                        crushCounter++;
                     }
 
-                    int delayFrames = (int)(beatSamples * (0.0625f + fxSub1 * 0.9375f));
+                    float delayFraction = 0.0625f + fxSub1 * 0.9375f;
+                    int delayFrames = (int)(beatSamples * delayFraction);
                     delayFrames = Math.max(1500, Math.min(echo.length / 2 - 1, delayFrames));
                     int read = echoPosition - delayFrames * 2;
-                    float spiralMod = 0f;
+
+                    float pan = 0f;
                     if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
-                        double direction = mode == MODE_SPIRAL_UP ? 1.0 : -1.0;
-                        spiralMod = (float)Math.sin(frameCounter * 0.00024 * direction) * fxSub2 * 420f;
-                        read -= (int)spiralMod * 2;
+                        float direction = mode == MODE_SPIRAL_UP ? 1f : -1f;
+                        float sweep = (float)Math.sin(frameCounter * 0.00034f) * direction;
+                        int modulation = (int)(sweep * (0.08f + fxSub2 * 0.92f) * 1450f);
+                        read -= modulation * 2;
+                        pan = sweep * fxSub2 * 0.42f;
                     }
                     while (read < 0) read += echo.length;
                     while (read >= echo.length) read -= echo.length;
-                    float wetL = echo[read];
-                    float wetR = echo[read + 1];
+                    float delayedL = echo[read];
+                    float delayedR = echo[read + 1];
+
                     float feedback;
-                    if (mode == MODE_ECHO) feedback = 0.10f + fxSub2 * 0.78f;
-                    else if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) feedback = 0.48f + fxSub1 * 0.24f;
-                    else if (mode == MODE_CRUSH_ECHO) feedback = 0.20f + fxSub2 * 0.58f;
-                    else feedback = 0.28f;
-                    echo[echoPosition] = clamp(inputL + wetL * feedback);
-                    echo[echoPosition + 1] = clamp(inputR + wetR * feedback);
-                    float pan = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN)
-                            ? (float)Math.sin(frameCounter * 0.00031) * fxSub2 * 0.22f : 0f;
-                    float wet = fxLevel * ((mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.76f : 0.88f);
-                    outL += wetL * wet * (1f + pan);
-                    outR += wetR * wet * (1f - pan);
+                    if (mode == MODE_ECHO) feedback = 0.08f + fxSub2 * 0.82f;
+                    else if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) feedback = 0.42f + fxSub2 * 0.34f;
+                    else if (mode == MODE_CRUSH_ECHO) feedback = 0.18f + fxSub2 * 0.62f;
+                    else feedback = 0.24f + fxSub2 * 0.42f;
+
+                    echo[echoPosition] = clamp(inputL + delayedL * feedback);
+                    echo[echoPosition + 1] = clamp(inputR + delayedR * feedback);
+                    float wet = fxLevel * (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN ? 0.95f : 0.90f);
+                    outL += delayedL * wet * (1f + pan);
+                    outR += delayedR * wet * (1f - pan);
                     if (mode == MODE_CRUSH_ECHO) {
-                        outL = softClip(outL * 1.7f);
-                        outR = softClip(outR * 1.7f);
+                        outL = softClip(outL * (1.15f + fxSub2 * 0.65f));
+                        outR = softClip(outR * (1.15f + fxSub2 * 0.65f));
                     }
                     echoPosition += 2;
                     if (echoPosition >= echo.length) echoPosition = 0;
@@ -284,7 +320,6 @@ public final class DspProcessor {
             pcm[i + 1] = (short)(softKnee(finalR) * 32767f);
         }
     }
-
 
     /**
      * Estimates quarter-note tempo from low-band attacks. It is intentionally
