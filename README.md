@@ -1,4 +1,4 @@
-# RMX-1000 Audio Test 0.6.4
+# RMX-1000 Audio Test 0.7.0
 
 Standalone Android proof-of-concept. It does not modify FREQUALIZER.
 
@@ -47,3 +47,11 @@ GitHub Actions builds the debug APK on pushes to `main`.
 - Clears interval/challenger history after a long low-band onset gap (3 seconds), useful when playback pauses or a new track starts, while retaining the last BPM as the next starting point.
 - The audio routing, effect processing, UI controls, and stable-clock smoothing are otherwise unchanged.
 - Real-track listening tests are still required; low-frequency onset analysis can remain ambiguous on sparse or syncopated material.
+
+
+## v0.7.0 — Adjustable Scene FX controls
+- Adds live FX LEVEL and FEEDBACK rotary controls for Echo and Reverb.
+- The default control positions preserve approximately the previous effect balance and feedback character.
+- FX LEVEL adjusts the wet/dry balance; FEEDBACK adjusts the repeat/reverb regeneration amount.
+- The adaptive beat tracker and its tempo-following parameters are unchanged from v0.6.4.
+- These are original adjustable DSP approximations, not exact RMX-1000 factory parameters.
