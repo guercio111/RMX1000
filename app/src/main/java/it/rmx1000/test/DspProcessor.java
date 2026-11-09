@@ -30,6 +30,10 @@ public final class DspProcessor {
     private volatile int isolateMode = -1;
     private final float[] echo = new float[48000 * 2 * 2];
     private int echoPosition;
+    // Dedicated dual-head granular delay for the SPIRAL pitch sweep.
+    private static final int SPIRAL_GRAIN = 4096;
+    private final float[] spiralBuffer = new float[48000 * 2 * 2];
+    private int spiralPosition;
 
     private final int[] lengths = {1493, 1601, 1747, 1867};
     private final float[][] reverbLines = new float[4][];
@@ -189,17 +193,42 @@ public final class DspProcessor {
                     outL = left + wetL * amount * 1.55f;
                     outR = right + wetR * amount * 1.55f;
                 } else {
-                    // SUB 1 sets echo delay time in beat fractions (1/8 through 1 beat).
+                    // SUB 1 controls the beat-synchronised echo repeat interval.
+                    // SCENE FX independently controls the spiral's granular delay time.
                     float delayFraction = 0.125f + fxSub1 * 0.875f;
                     if (mode == MODE_NOISE) delayFraction = 0.25f; // NOISE SUB 1 is volume, not delay.
-                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
-                        // Both controls remain active: SCENE FX shifts the spiral tap,
-                        // while SUB 1 sets the echo-repeat interval around that base.
-                        float spiralBase = 0.125f + fxLevel * 0.875f;
-                        delayFraction = 0.5f * (spiralBase + (0.125f + fxSub1 * 0.875f));
-                    }
                     int delayFrames = (int)(beatSamples * delayFraction);
                     delayFrames = Math.max(1500, Math.min(echo.length / 2 - 1, delayFrames));
+
+                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
+                        // Pitch-shift the source with two overlapping read heads.
+                        // Their delay ramps are opposite in direction for UP and DOWN;
+                        // Hann crossfades hide grain resets without changing the beat clock.
+                        spiralBuffer[spiralPosition] = left;
+                        spiralBuffer[spiralPosition + 1] = right;
+                        float baseDelay = beatSamples * (0.125f + fxLevel * 0.875f);
+                        float amount = fxSub2;
+                        float phaseA = (frameCounter % SPIRAL_GRAIN) / (float)SPIRAL_GRAIN;
+                        float phaseB = phaseA < 0.5f ? phaseA + 0.5f : phaseA - 0.5f;
+                        float rate = mode == MODE_SPIRAL_UP ? 1.0f : 0.5f;
+                        float swing = amount * rate * SPIRAL_GRAIN;
+                        float delayA = mode == MODE_SPIRAL_UP
+                                ? baseDelay + swing * (0.5f - phaseA)
+                                : baseDelay + swing * (phaseA - 0.5f);
+                        float delayB = mode == MODE_SPIRAL_UP
+                                ? baseDelay + swing * (0.5f - phaseB)
+                                : baseDelay + swing * (phaseB - 0.5f);
+                        float weightA = 0.5f - 0.5f * (float)Math.cos(phaseA * Math.PI * 2.0);
+                        float weightB = 1.0f - weightA;
+                        float readA = spiralPosition - delayA * 2f;
+                        float readB = spiralPosition - delayB * 2f;
+                        inputL = readSpiral(spiralBuffer, readA) * weightA
+                                + readSpiral(spiralBuffer, readB) * weightB;
+                        inputR = readSpiral(spiralBuffer, readA + 1f) * weightA
+                                + readSpiral(spiralBuffer, readB + 1f) * weightB;
+                        spiralPosition += 2;
+                        if (spiralPosition >= spiralBuffer.length) spiralPosition = 0;
+                    }
 
                     if (mode == MODE_NOISE) {
                         // White noise -> band-pass -> beat-synchronised echo.
@@ -247,10 +276,6 @@ public final class DspProcessor {
                     if (mode == MODE_BPF_ECHO || mode == MODE_HPF_ECHO || mode == MODE_LPF_ECHO ||
                             mode == MODE_CRUSH_ECHO || mode == MODE_NOISE) {
                         modulation = (int)(Math.sin(frameCounter * 0.0017f) * fxSub2 * 360f);
-                    } else if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
-                        float direction = mode == MODE_SPIRAL_UP ? 1f : -1f;
-                        float sweep = (float)Math.sin(frameCounter * (0.00035f + fxSub2 * 0.0012f));
-                        modulation = (int)(sweep * direction * fxSub2 * 1900f);
                     }
 
                     int read = echoPosition - delayFrames * 2 - modulation * 2;
@@ -470,6 +495,18 @@ public final class DspProcessor {
         return value;
     }
 
+
+    /** Linear-interpolated read from the interleaved stereo spiral delay ring. */
+    private float readSpiral(float[] buffer, float position) {
+        float length = buffer.length;
+        while (position < 0f) position += length;
+        while (position >= length) position -= length;
+        int index = (int)position;
+        int next = index + 2;
+        if (next >= buffer.length) next = 0;
+        float fraction = position - index;
+        return buffer[index] + (buffer[next] - buffer[index]) * fraction;
+    }
 
     private int repeatReadPosition() {
         int delay = (int) Math.max(2000L, Math.min(6000L, beatSamples / 8L));
