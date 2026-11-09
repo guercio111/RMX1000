@@ -16,22 +16,32 @@ public final class RotaryKnob extends View {
     private final RectF arc = new RectF();
     private final String label;
     private final OnValueChanged listener;
+    private final float minValue;
+    private final float maxValue;
+    private final String unit;
     private float value = 0f;
     private float downY;
     private float downValue;
     private final float density;
 
     public RotaryKnob(Context context, String label, OnValueChanged listener) {
+        this(context, label, -1f, 1f, "dB", listener);
+    }
+
+    public RotaryKnob(Context context, String label, float minValue, float maxValue, String unit, OnValueChanged listener) {
         super(context);
         this.label = label;
         this.listener = listener;
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.unit = unit;
         density = getResources().getDisplayMetrics().density;
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         setMinimumHeight((int)dp(150));
     }
 
     public void setValue(float v) {
-        value = Math.max(-1f, Math.min(1f, v));
+        value = Math.max(minValue, Math.min(maxValue, v));
         invalidate();
     }
     public float getValue() { return value; }
@@ -55,7 +65,8 @@ public final class RotaryKnob extends View {
         paint.setColor(0xFF55585E);
         c.drawArc(arc, 135, 270, false, paint);
         paint.setColor(0xFF35D477);
-        c.drawArc(arc, 270, value * 135f, false, paint);
+        float normalized = ((value - minValue) / (maxValue - minValue)) * 2f - 1f;
+        c.drawArc(arc, 270, normalized * 135f, false, paint);
 
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(0xFF202328);
@@ -63,7 +74,7 @@ public final class RotaryKnob extends View {
         paint.setColor(0xFF777D86);
         c.drawCircle(cx, cy, radius * 0.68f, paint);
 
-        double angle = Math.toRadians(270 + value * 135.0);
+        double angle = Math.toRadians(270 + normalized * 135.0);
         float inner = radius * 0.18f;
         float outer = radius * 0.61f;
         paint.setColor(0xFFFFD34E);
@@ -74,7 +85,9 @@ public final class RotaryKnob extends View {
         paint.setTextSize(dp(14));
         paint.setFakeBoldText(false);
         paint.setColor(ColorForValue());
-        String readout = value <= -0.98f ? "CUT" : String.format(Locale.US, "%+.1f dB", value < 0 ? value * 60f : value * 6f);
+        String readout;
+        if ("dB".equals(unit)) readout = value <= -0.98f ? "CUT" : String.format(Locale.US, "%+.1f dB", value < 0 ? value * 60f : value * 6f);
+        else readout = String.format(Locale.US, "%.0f%s", value * 100f, unit);
         c.drawText(readout, cx, getHeight() - dp(8), paint);
     }
 
@@ -88,8 +101,8 @@ public final class RotaryKnob extends View {
                 getParent().requestDisallowInterceptTouchEvent(true);
                 return true;
             case MotionEvent.ACTION_MOVE:
-                float next = downValue + (downY - event.getY()) / dp(170) * 2f;
-                value = Math.max(-1f, Math.min(1f, next));
+                float next = downValue + (downY - event.getY()) / dp(170) * (maxValue - minValue);
+                value = Math.max(minValue, Math.min(maxValue, next));
                 invalidate();
                 if (listener != null) listener.onChanged(value);
                 return true;
