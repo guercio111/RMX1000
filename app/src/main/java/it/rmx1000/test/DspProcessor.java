@@ -54,6 +54,16 @@ public final class DspProcessor {
     public int getIsolateMode() { return isolateMode; }
     public void setEnabled(boolean value) { enabled = value; }
 
+    /** Reset rhythmic phase and repeat memory at the beginning of a new capture. */
+    public void resetRhythm() {
+        frameCounter = 0L;
+        repeatPosition = 0;
+        for (int band = 0; band < 3; band++) {
+            java.util.Arrays.fill(repeatL[band], 0f);
+            java.util.Arrays.fill(repeatR[band], 0f);
+        }
+    }
+
     /** band: 0=LOW, 1=MID, 2=HIGH; setting -1..+1, center is neutral. */
     public void setIsolateBand(int band, float setting) {
         float v = Math.max(-1f, Math.min(1f, setting));
@@ -139,9 +149,11 @@ public final class DspProcessor {
             repeatL[band][repeatPosition] = input + repeatL[band][repeatPosition] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
-                long phase = frameCounter % 12000L; // quarter-note at 120 BPM
-                float gate = phase < 6000L ? 1f : 0f;
-                value *= gate;
+                // Half-beat cycle at 120 BPM; deeper knob travel creates a longer cut.
+                long phase = frameCounter % 12000L;
+                float cutAmount = Math.min(1f, 1f - gain);
+                float openFrames = 12000f * (0.88f - cutAmount * 0.38f);
+                value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
                 value += repeatL[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
                 repeatL[band][repeatPosition] = input + repeatL[band][repeatPosition] * 0.35f;
@@ -167,7 +179,9 @@ public final class DspProcessor {
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
                 long phase = frameCounter % 12000L;
-                value *= phase < 6000L ? 1f : 0f;
+                float cutAmount = Math.min(1f, 1f - gain);
+                float openFrames = 12000f * (0.88f - cutAmount * 0.38f);
+                value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
                 value += repeatR[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
                 repeatR[band][repeatPosition] = input + repeatR[band][repeatPosition] * 0.35f;
