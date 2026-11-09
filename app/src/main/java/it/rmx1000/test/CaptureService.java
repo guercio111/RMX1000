@@ -87,11 +87,11 @@ public class CaptureService extends Service {
         if (ACTION_START.equals(action) && !running.get()) {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.resetRhythm();
-            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
+            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false));
             dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
             dsp.setFxSub1(intent.getFloatExtra(EXTRA_FX_SUB1, 0.50f));
             dsp.setFxSub2(intent.getFloatExtra(EXTRA_FX_SUB2, 0.50f));
-            dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
+            dsp.setMode(intent.getIntExtra(EXTRA_MODE, -1));
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, -1));
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
             dsp.setIsolateBand(1, intent.getFloatExtra(EXTRA_MID, 0f));
