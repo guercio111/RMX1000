@@ -22,6 +22,7 @@ public class MainActivity extends Activity {
     private Button fxButton;
     private Button modeButton;
     private Button isolateModeButton;
+    private TextView rangeNote;
     private boolean fxEnabled = true;
     private boolean captureStarted = false;
     private int fxMode = DspProcessor.MODE_ECHO;
@@ -41,7 +42,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.4");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.5");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -105,6 +106,7 @@ public class MainActivity extends Activity {
             isolateMode = (isolateMode + 1) % 4;
             String[] names = {"ISOLATOR", "CUT / ADD", "TRANS / ROLL", "GATE / DRIVE"};
             isolateModeButton.setText("ISOLATE FX  /  " + names[isolateMode]);
+            updateIsolateHint();
             if (captureStarted) {
                 Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ISOLATE_MODE);
                 i.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
@@ -122,8 +124,8 @@ public class MainActivity extends Activity {
         itp.topMargin = dp(3);
         transport.addView(isolateTitle, itp);
 
-        TextView rangeNote = new TextView(this);
-        rangeNote.setText("Centro = neutro  |  Sinistra = CUT  |  Destra = effetto");
+        rangeNote = new TextView(this);
+        updateIsolateHint();
         rangeNote.setTextColor(Color.LTGRAY);
         rangeNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         rangeNote.setGravity(Gravity.CENTER);
@@ -175,6 +177,27 @@ public class MainActivity extends Activity {
         note.setGravity(Gravity.CENTER);
         root.addView(note, new LinearLayout.LayoutParams(-1, dp(28)));
         setContentView(root);
+    }
+
+
+    private void updateIsolateHint() {
+        if (rangeNote == null) return;
+        String hint;
+        switch (isolateMode) {
+            case DspProcessor.ISOLATE_CUT_ADD:
+                hint = "CENTRO = NEUTRO  |  SINISTRA = CUT  |  DESTRA = REPEAT";
+                break;
+            case DspProcessor.ISOLATE_TRANS_ROLL:
+                hint = "CENTRO = NEUTRO  |  SINISTRA = TAGLIO RITMICO  |  DESTRA = ROLL";
+                break;
+            case DspProcessor.ISOLATE_GATE_DRIVE:
+                hint = "CENTRO = NEUTRO  |  SINISTRA = GATE  |  DESTRA = DRIVE";
+                break;
+            default:
+                hint = "CENTRO = NEUTRO  |  SINISTRA = ATTENUAZIONE  |  DESTRA = BOOST";
+                break;
+        }
+        rangeNote.setText(hint);
     }
 
     private Button makeButton(String text, int color) {
