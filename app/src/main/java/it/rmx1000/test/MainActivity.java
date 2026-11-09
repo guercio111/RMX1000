@@ -52,7 +52,7 @@ public class MainActivity extends Activity {
     private Button xpadRollButton, xpadHoldButton;
     private boolean xpadRoll = false, xpadHold = false, xpadTouch = false;
     private int xpadDivision = 2;
-    private int xpadBank = 0;
+    private int xpadBank = -1;
     private final Button[] xpadBankButtons = new Button[4];
 
     @Override public void onCreate(Bundle state) {
@@ -92,17 +92,17 @@ public class MainActivity extends Activity {
         LinearLayout bankRow = new LinearLayout(this);
         bankRow.setOrientation(LinearLayout.HORIZONTAL);
         bankRow.setGravity(Gravity.CENTER);
-        String[] bankNames = {"KICK", "SNARE", "CLAP", "HI HAT"};
-        for (int bank = 0; bank < bankNames.length; bank++) {
-            final int selectedBank = bank;
-            Button bankButton = makeButton(bankNames[bank], bank == 0 ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80));
-            bankButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        String[] bankNames = {"OFF", "KICK", "SNARE", "CLAP", "HI HAT"};
+        for (int slot = 0; slot < bankNames.length; slot++) {
+            final int selectedBank = slot - 1;
+            Button bankButton = makeButton(bankNames[slot], selectedBank == -1 ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80));
+            bankButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
             bankButton.setOnClickListener(v -> {
                 xpadBank = selectedBank;
                 updateXpadButtons();
                 sendXpadState();
             });
-            xpadBankButtons[bank] = bankButton;
+            if (slot > 0) xpadBankButtons[slot - 1] = bankButton;
             LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(34), 1f);
             bp.setMargins(dp(2), 0, dp(2), 0);
             bankRow.addView(bankButton, bp);
