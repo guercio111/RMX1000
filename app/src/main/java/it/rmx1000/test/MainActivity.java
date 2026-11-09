@@ -1,6 +1,10 @@
 package it.rmx1000.test;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.os.Build;
+import java.util.Locale;
 import android.media.projection.MediaProjectionManager;
 import android.content.Context;
 import android.content.Intent;
@@ -19,6 +23,16 @@ public class MainActivity extends Activity {
     private static final int REQUEST_AUDIO_PERMISSION = 7002;
     private MediaProjectionManager projectionManager;
     private TextView status;
+    private TextView tempoView;
+    private boolean tempoReceiverRegistered;
+    private final BroadcastReceiver tempoReceiver = new BroadcastReceiver() {
+        @Override public void onReceive(Context context, Intent intent) {
+            if (CaptureService.ACTION_TEMPO.equals(intent.getAction()) && tempoView != null) {
+                float bpm = intent.getFloatExtra(CaptureService.EXTRA_BPM, 0f);
+                tempoView.setText(String.format(Locale.ROOT, "CLOCK  %.1f BPM  •  STIMA", bpm));
+            }
+        }
+    };
     private Button fxButton;
     private Button modeButton;
     private Button isolateModeButton;
@@ -42,7 +56,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.5");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.6.2");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -54,6 +68,13 @@ public class MainActivity extends Activity {
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         status.setGravity(Gravity.CENTER);
         root.addView(status, new LinearLayout.LayoutParams(-1, dp(48)));
+
+        tempoView = new TextView(this);
+        tempoView.setText("CLOCK  — BPM");
+        tempoView.setTextColor(0xFFFFC928);
+        tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        tempoView.setGravity(Gravity.CENTER);
+        root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(32)));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.HORIZONTAL);
@@ -78,6 +99,7 @@ public class MainActivity extends Activity {
             Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_STOP);
             startService(i);
             status.setText("Arresto richiesto.");
+            tempoView.setText("CLOCK  fermo");
         });
         transport.addView(stop, buttonParams());
 
@@ -179,6 +201,22 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
+
+    @Override protected void onStart() {
+        super.onStart();
+        IntentFilter filter = new IntentFilter(CaptureService.ACTION_TEMPO);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(tempoReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        else registerReceiver(tempoReceiver, filter);
+        tempoReceiverRegistered = true;
+    }
+
+    @Override protected void onStop() {
+        if (tempoReceiverRegistered) {
+            unregisterReceiver(tempoReceiver);
+            tempoReceiverRegistered = false;
+        }
+        super.onStop();
+    }
 
     private void updateIsolateHint() {
         if (rangeNote == null) return;
