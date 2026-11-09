@@ -22,13 +22,15 @@ public class CaptureService extends Service {
     public static final String ACTION_STOP = "it.rmx1000.test.STOP";
     public static final String ACTION_ECHO = "it.rmx1000.test.ECHO";
     public static final String ACTION_MODE = "it.rmx1000.test.MODE";
-    public static final String ACTION_ISOLATE = "it.rmx1000.test.ISOLATE";\n    public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
+    public static final String ACTION_ISOLATE = "it.rmx1000.test.ISOLATE";
+    public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
     public static final String EXTRA_MODE = "fx_mode";
     public static final String EXTRA_BAND = "isolate_band";
-    public static final String EXTRA_VALUE = "isolate_value";\n    public static final String EXTRA_ISOLATE_MODE = "isolate_mode";
+    public static final String EXTRA_VALUE = "isolate_value";
+    public static final String EXTRA_ISOLATE_MODE = "isolate_mode";
     public static final String EXTRA_LOW = "isolate_low";
     public static final String EXTRA_MID = "isolate_mid";
     public static final String EXTRA_HIGH = "isolate_high";
@@ -58,7 +60,11 @@ public class CaptureService extends Service {
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
             return START_NOT_STICKY;
         }
-        if (ACTION_ISOLATE_MODE.equals(action)) {\n            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));\n            return START_NOT_STICKY;\n        }\n        if (ACTION_ISOLATE.equals(action)) {
+        if (ACTION_ISOLATE_MODE.equals(action)) {
+            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
+            return START_NOT_STICKY;
+        }
+        if (ACTION_ISOLATE.equals(action)) {
             dsp.setIsolateBand(intent.getIntExtra(EXTRA_BAND, -1), intent.getFloatExtra(EXTRA_VALUE, 0f));
             return START_NOT_STICKY;
         }
@@ -66,6 +72,7 @@ public class CaptureService extends Service {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
+            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
             dsp.setIsolateBand(1, intent.getFloatExtra(EXTRA_MID, 0f));
             dsp.setIsolateBand(2, intent.getFloatExtra(EXTRA_HIGH, 0f));
