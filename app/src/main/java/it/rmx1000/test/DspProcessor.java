@@ -122,16 +122,19 @@ public final class DspProcessor {
     /** band: 0=LOW, 1=MID, 2=HIGH; setting -1..+1, center is neutral. */
     public void setIsolateBand(int band, float setting) {
         float v = Math.max(-1f, Math.min(1f, setting));
-        float gain = bandGain(v);
+        if (band < 0 || band > 2) return;
+        float gain = bandGain(v, band);
         if (band == 0) lowTargetGain = gain;
         else if (band == 1) midTargetGain = gain;
-        else if (band == 2) highTargetGain = gain;
+        else highTargetGain = gain;
     }
 
-    private float bandGain(float setting) {
-        // Wide, smooth attenuation for cuts; restrained boost to preserve headroom.
+    private float bandGain(float setting, int band) {
+        // Preserve strong cuts, but keep LOW/MID boosts gentler to avoid
+        // exciting bass and low-mid resonances on tablet speakers/headphones.
         if (setting < 0f) return (float)Math.pow(10.0, (setting * 48.0) / 20.0);
-        return (float)Math.pow(10.0, (setting * 3.0) / 20.0);
+        float maxBoostDb = band == 0 ? 1.5f : (band == 1 ? 2.0f : 3.0f);
+        return (float)Math.pow(10.0, (setting * maxBoostDb) / 20.0);
     }
 
     public void process(short[] pcm, int samples) {
