@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 1.1.0");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 1.2.0");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -301,16 +301,16 @@ public class MainActivity extends Activity {
     private void updateSceneHint() {
         if (sceneHint == null) return;
         String[] descriptions = {
-                "BPF ECHO  •  SUB 1: DELAY  /  SUB 2: BANDA",
-                "ECHO  •  SUB 1: DELAY  /  SUB 2: FEEDBACK",
-                "NOISE  •  SUB 1: QUANTITÀ  /  SUB 2: COLORE",
-                "SPIRAL UP  •  SUB 1: TEMPO  /  SUB 2: MODULAZIONE",
-                "REVERB UP  •  SUB 1: CODA  /  SUB 2: TONO",
-                "HPF ECHO  •  SUB 1: DELAY  /  SUB 2: TAGLIO",
-                "LPF ECHO  •  SUB 1: DELAY  /  SUB 2: TAGLIO",
-                "CRUSH ECHO  •  SUB 1: DELAY  /  SUB 2: CRUSH",
-                "SPIRAL DOWN  •  SUB 1: TEMPO  /  SUB 2: MODULAZIONE",
-                "REVERB DOWN  •  SUB 1: CODA  /  SUB 2: TONO"
+                "BPF ECHO  •  SCENE: BANDA  /  SUB 1: DELAY  /  SUB 2: MOD",
+                "ECHO  •  SCENE: MIX  /  SUB 1: DELAY  /  SUB 2: HPF",
+                "NOISE  •  SCENE: FILTRO  /  SUB 1: VOLUME  /  SUB 2: MOD",
+                "SPIRAL UP  •  SCENE: SPIRAL TIME  /  SUB 1: ECHO TIME  /  SUB 2: PITCH UP",
+                "REVERB UP  •  SCENE: AMBIENCE  /  SUB 1: DECAY  /  SUB 2: HPF",
+                "HPF ECHO  •  SCENE: HPF  /  SUB 1: DELAY  /  SUB 2: MOD",
+                "LPF ECHO  •  SCENE: LPF  /  SUB 1: DELAY  /  SUB 2: MOD",
+                "CRUSH ECHO  •  SCENE: CRUSH  /  SUB 1: DELAY  /  SUB 2: MOD",
+                "SPIRAL DOWN  •  SCENE: SPIRAL TIME  /  SUB 1: ECHO TIME  /  SUB 2: PITCH DOWN",
+                "REVERB DOWN  •  SCENE: AMBIENCE  /  SUB 1: DECAY  /  SUB 2: LPF"
         };
         sceneHint.setText(fxMode < 0 ? "SCENE FX OFF" : descriptions[fxMode]);
     }
