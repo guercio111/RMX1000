@@ -123,7 +123,7 @@ public class MainActivity extends Activity {
         transport.addView(isolateTitle, itp);
 
         TextView rangeNote = new TextView(this);
-        rangeNote.setText("Centro = 0 dB   |   Sinistra = CUT   |   Destra = +6 dB");
+        rangeNote.setText("Centro = neutro  |  Sinistra = CUT  |  Destra = effetto");
         rangeNote.setTextColor(Color.LTGRAY);
         rangeNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         rangeNote.setGravity(Gravity.CENTER);
