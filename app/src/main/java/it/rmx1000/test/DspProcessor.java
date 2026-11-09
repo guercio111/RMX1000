@@ -42,7 +42,7 @@ public final class DspProcessor {
     private final float[] diffuser1L = new float[347], diffuser1R = new float[347];
     private final float[] diffuser2L = new float[421], diffuser2R = new float[421];
     private int diffuser1Position, diffuser2Position;
-    private float reverbDampL, reverbDampR;
+    private final float[] reverbDampL = new float[4], reverbDampR = new float[4];
     private float sceneLpL, sceneLpR, sceneHpL, sceneHpR;
     private float noiseColorL, noiseColorR, crushHoldL, crushHoldR;
     private int crushCounter;
@@ -205,19 +205,19 @@ public final class DspProcessor {
                 // Echo feedback is fixed and decays naturally; SUB 2 is never a feedback knob.
                 if (mode == MODE_REVERB || mode == MODE_REVERB_DOWN) {
                     float sumL = 0f, sumR = 0f;
-                    float decay = 0.42f + fxSub1 * 0.48f;
+                    float decay = 0.38f + fxSub1 * 0.42f; // bounded decay headroom
                     float damping = 0.035f + fxSub2 * 0.24f;
                     for (int line = 0; line < reverbLines.length; line++) {
                         int p = reverbPositions[line];
                         float a = reverbLines[line][p], b = reverbLines[line][p + 1];
                         sumL += a; sumR += b;
-                        reverbDampL += (a - reverbDampL) * damping;
-                        reverbDampR += (b - reverbDampR) * damping;
+                        reverbDampL[line] += (a - reverbDampL[line]) * damping;
+                        reverbDampR[line] += (b - reverbDampR[line]) * damping;
                         float crossL = (line & 1) == 0 ? right : left;
                         float crossR = (line & 1) == 0 ? left : right;
                         float feedback = mode == MODE_REVERB_DOWN ? decay * 0.90f : decay;
-                        reverbLines[line][p] = clamp(left * 0.20f + reverbDampL * feedback + crossL * 0.025f);
-                        reverbLines[line][p + 1] = clamp(right * 0.20f + reverbDampR * feedback + crossR * 0.025f);
+                        reverbLines[line][p] = clamp(left * 0.20f + reverbDampL[line] * feedback + crossL * 0.025f);
+                        reverbLines[line][p + 1] = clamp(right * 0.20f + reverbDampR[line] * feedback + crossR * 0.025f);
                         p += 2; if (p >= reverbLines[line].length) p = 0;
                         reverbPositions[line] = p;
                     }
@@ -245,9 +245,9 @@ public final class DspProcessor {
                         sceneLpR += (ap2R - sceneLpR) * a;
                         wetL = sceneLpL; wetR = sceneLpR;
                     }
-                    float amount = fxLevel * (0.30f + fxSub1 * 0.70f);
-                    outL = left + wetL * amount * 1.55f;
-                    outR = right + wetR * amount * 1.55f;
+                    float amount = fxLevel * (0.25f + fxSub1 * 0.55f);
+                    outL = left + wetL * amount * 1.20f;
+                    outR = right + wetR * amount * 1.20f;
                 } else {
                     // SUB 1 controls the beat-synchronised echo repeat interval.
                     // SCENE FX independently controls the spiral's granular delay time.
@@ -296,15 +296,15 @@ public final class DspProcessor {
                         sceneLpL += (nL - sceneLpL) * lp; sceneLpR += (nR - sceneLpR) * lp;
                         float hp = 0.012f + fxLevel * 0.12f;
                         sceneHpL += (sceneLpL - sceneHpL) * hp; sceneHpR += (sceneLpR - sceneHpR) * hp;
-                        inputL = (sceneLpL - sceneHpL) * fxSub1 * 0.95f;
-                        inputR = (sceneLpR - sceneHpR) * fxSub1 * 0.95f;
+                        inputL = (sceneLpL - sceneHpL) * fxSub1 * 0.72f;
+                        inputR = (sceneLpR - sceneHpR) * fxSub1 * 0.72f;
                     } else if (mode == MODE_BPF_ECHO) {
                         // SCENE FX sweeps the band-pass cutoff; SUB 2 modulates the output.
                         float lp = 0.012f + fxLevel * 0.34f;
                         sceneLpL += (inputL - sceneLpL) * lp; sceneLpR += (inputR - sceneLpR) * lp;
                         float hp = 0.006f + fxLevel * 0.11f;
                         sceneHpL += (sceneLpL - sceneHpL) * hp; sceneHpR += (sceneLpR - sceneHpR) * hp;
-                        inputL = (sceneLpL - sceneHpL) * 2f; inputR = (sceneLpR - sceneHpR) * 2f;
+                        inputL = (sceneLpL - sceneHpL) * 1.35f; inputR = (sceneLpR - sceneHpR) * 1.35f;
                     } else if (mode == MODE_HPF_ECHO) {
                         // SCENE FX = high-pass cutoff.
                         float a = 0.004f + fxLevel * 0.22f;
@@ -331,7 +331,7 @@ public final class DspProcessor {
                     int modulation = 0;
                     if (mode == MODE_BPF_ECHO || mode == MODE_HPF_ECHO || mode == MODE_LPF_ECHO ||
                             mode == MODE_CRUSH_ECHO || mode == MODE_NOISE) {
-                        modulation = (int)(Math.sin(frameCounter * 0.0017f) * fxSub2 * 360f);
+                        modulation = (int)(Math.sin(frameCounter * 0.0017f) * fxSub2 * 180f);
                     }
 
                     int read = echoPosition - delayFrames * 2 - modulation * 2;
@@ -340,8 +340,8 @@ public final class DspProcessor {
                     float delayedL = echo[read], delayedR = echo[read + 1];
 
                     // Musical feedback is fixed, so repeats attenuate instead of self-oscillating.
-                    float feedback = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.52f : 0.43f;
-                    if (mode == MODE_NOISE) feedback = 0.36f;
+                    float feedback = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.42f : 0.38f;
+                    if (mode == MODE_NOISE) feedback = 0.30f;
                     echo[echoPosition] = clamp(inputL + delayedL * feedback);
                     echo[echoPosition + 1] = clamp(inputR + delayedR * feedback);
 
@@ -354,8 +354,8 @@ public final class DspProcessor {
                         outL = left * (1f - mix * 0.85f) + left * 0.15f + hpL * mix * 1.25f;
                         outR = right * (1f - mix * 0.85f) + right * 0.15f + hpR * mix * 1.25f;
                     } else {
-                        float wet = mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN ? 0.90f : 0.82f;
-                        if (mode == MODE_NOISE) wet = 0.88f;
+                        float wet = mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN ? 0.72f : 0.68f;
+                        if (mode == MODE_NOISE) wet = 0.65f;
                         outL = left + delayedL * wet;
                         outR = right + delayedR * wet;
                     }
