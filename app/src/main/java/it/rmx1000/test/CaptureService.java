@@ -10,7 +10,6 @@ import android.media.AudioFormat;
 import android.media.AudioPlaybackCaptureConfiguration;
 import android.media.AudioRecord;
 import android.media.AudioTrack;
-import android.media.MediaRecorder;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
@@ -22,13 +21,15 @@ public class CaptureService extends Service {
     public static final String ACTION_START = "it.rmx1000.test.START";
     public static final String ACTION_STOP = "it.rmx1000.test.STOP";
     public static final String ACTION_ECHO = "it.rmx1000.test.ECHO";
+    public static final String ACTION_MODE = "it.rmx1000.test.MODE";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
+    public static final String EXTRA_MODE = "fx_mode";
     private static final String CHANNEL = "rmx_audio_capture";
     private static final int NOTIFICATION_ID = 1001;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private volatile boolean echoEnabled = true;
+    private final DspProcessor dsp = new DspProcessor();
     private volatile Thread audioThread;
     private MediaProjection projection;
     private AudioRecord recorder;
@@ -43,10 +44,18 @@ public class CaptureService extends Service {
         if (intent == null) return START_NOT_STICKY;
         String action = intent.getAction();
         if (ACTION_STOP.equals(action)) { stopEngine(); stopSelf(); return START_NOT_STICKY; }
-        if (ACTION_ECHO.equals(action)) { echoEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true); return START_NOT_STICKY; }
+        if (ACTION_ECHO.equals(action)) {
+            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
+            return START_NOT_STICKY;
+        }
+        if (ACTION_MODE.equals(action)) {
+            dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
+            return START_NOT_STICKY;
+        }
         if (ACTION_START.equals(action) && !running.get()) {
             startForeground(NOTIFICATION_ID, buildNotification());
-            echoEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true);
+            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
+            dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
             int code = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent data = intent.getParcelableExtra(EXTRA_DATA);
             try {
@@ -88,36 +97,19 @@ public class CaptureService extends Service {
         running.set(true);
         recorder.startRecording();
         player.play();
-        audioThread = new Thread(() -> audioLoop(rate), "RMX-Audio-DSP");
+        audioThread = new Thread(() -> audioLoop(), "RMX-Audio-DSP");
         audioThread.start();
     }
 
-    private void audioLoop(int rate) {
+    private void audioLoop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
-        short[] pcm = new short[1024]; // 512 stereo frames
-        float[] delay = new float[(int)(rate * 0.25f) * 2];
-        int write = 0;
+        short[] pcm = new short[1024];
         try {
             while (running.get()) {
                 int n = recorder.read(pcm, 0, pcm.length, AudioRecord.READ_BLOCKING);
                 if (n <= 0) { if (n == AudioRecord.ERROR_DEAD_OBJECT) break; continue; }
                 int usable = n - (n % 2);
-                for (int i = 0; i < usable; i += 2) {
-                    float left = pcm[i] / 32768.0f;
-                    float right = pcm[i + 1] / 32768.0f;
-                    float dl = delay[write];
-                    float dr = delay[write + 1];
-                    float wetL = echoEnabled ? dl : 0f;
-                    float wetR = echoEnabled ? dr : 0f;
-                    float outL = left * 0.82f + wetL * 0.42f;
-                    float outR = right * 0.82f + wetR * 0.42f;
-                    delay[write] = clamp(left + dl * 0.32f);
-                    delay[write + 1] = clamp(right + dr * 0.32f);
-                    write += 2;
-                    if (write >= delay.length) write = 0;
-                    pcm[i] = (short)(clamp(outL) * 32767.0f);
-                    pcm[i + 1] = (short)(clamp(outR) * 32767.0f);
-                }
+                dsp.process(pcm, usable);
                 int offset = 0;
                 while (offset < usable && running.get()) {
                     int written = player.write(pcm, offset, usable - offset, AudioTrack.WRITE_BLOCKING);
@@ -134,7 +126,6 @@ public class CaptureService extends Service {
         }
     }
 
-    private float clamp(float v) { return Math.max(-0.98f, Math.min(0.98f, v)); }
     private synchronized void stopEngine() {
         running.set(false);
         if (recorder != null) { try { recorder.stop(); } catch (Exception ignored) {} }
