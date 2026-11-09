@@ -1,0 +1,14 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'it.rmx1000.test'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'it.rmx1000.test'
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName '0.1-test'
+    }
+}
