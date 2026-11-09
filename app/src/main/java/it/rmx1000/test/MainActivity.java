@@ -20,10 +20,10 @@ public class MainActivity extends Activity {
     private MediaProjectionManager projectionManager;
     private TextView status;
     private Button fxButton;
-    private Button modeButton;
+    private Button modeButton;\n    private Button isolateModeButton;
     private boolean fxEnabled = true;
     private boolean captureStarted = false;
-    private int fxMode = DspProcessor.MODE_ECHO;
+    private int fxMode = DspProcessor.MODE_ECHO;\n    private int isolateMode = DspProcessor.ISOLATE_ISOLATOR;
     private final float[] isolate = {0f, 0f, 0f};
 
     @Override public void onCreate(Bundle state) {
@@ -98,7 +98,7 @@ public class MainActivity extends Activity {
         });
         transport.addView(modeButton, buttonParams());
 
-        TextView isolateTitle = new TextView(this);
+        isolateModeButton = makeButton("ISOLATE FX  /  ISOLATOR", Color.rgb(95, 80, 145));\n        isolateModeButton.setOnClickListener(v -> {\n            isolateMode = (isolateMode + 1) % 4;\n            String[] names = {"ISOLATOR", "CUT / ADD", "TRANS / ROLL", "GATE / DRIVE"};\n            isolateModeButton.setText("ISOLATE FX  /  " + names[isolateMode]);\n            if (captureStarted) {\n                Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ISOLATE_MODE);\n                i.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);\n                startService(i);\n            }\n        });\n        transport.addView(isolateModeButton, buttonParams());\n\n        TextView isolateTitle = new TextView(this);
         isolateTitle.setText("ISOLATE FX");
         isolateTitle.setTextColor(0xFFFFC928);
         isolateTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
@@ -123,7 +123,7 @@ public class MainActivity extends Activity {
         content.addView(isolatePanel, ip);
 
         TextView isolateHint = new TextView(this);
-        isolateHint.setText("THREE-BAND ISOLATOR  •  TOUCH AND DRAG");
+        isolateHint.setText("THREE-BAND ISOLATE FX  •  TOUCH AND DRAG");
         isolateHint.setTextColor(0xFFBFC4CA);
         isolateHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         isolateHint.setGravity(Gravity.CENTER);
@@ -203,7 +203,7 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode);
         service.putExtra(CaptureService.EXTRA_DATA, data);
         service.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
-        service.putExtra(CaptureService.EXTRA_MODE, fxMode);
+        service.putExtra(CaptureService.EXTRA_MODE, fxMode);\n        service.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
         service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);
         service.putExtra(CaptureService.EXTRA_MID, isolate[1]);
         service.putExtra(CaptureService.EXTRA_HIGH, isolate[2]);
