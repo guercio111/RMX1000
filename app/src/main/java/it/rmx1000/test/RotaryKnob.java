@@ -27,7 +27,7 @@ public final class RotaryKnob extends View {
         this.listener = listener;
         density = getResources().getDisplayMetrics().density;
         setLayerType(View.LAYER_TYPE_SOFTWARE, null);
-        setMinimumHeight(dp(150));
+        setMinimumHeight((int)dp(150));
     }
 
     public void setValue(float v) {
