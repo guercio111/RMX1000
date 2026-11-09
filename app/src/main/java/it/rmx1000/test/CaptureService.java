@@ -47,6 +47,7 @@ public class CaptureService extends Service {
     public static final String EXTRA_XPAD_HOLD = "xpad_hold";
     public static final String EXTRA_XPAD_TOUCH = "xpad_touch";
     public static final String EXTRA_XPAD_DIVISION = "xpad_division";
+    public static final String EXTRA_XPAD_BANK = "xpad_bank";
     private static final String CHANNEL = "rmx_audio_capture";
     private static final int NOTIFICATION_ID = 1001;
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -90,6 +91,7 @@ public class CaptureService extends Service {
             dsp.setXpadHold(intent.getBooleanExtra(EXTRA_XPAD_HOLD, false));
             dsp.setXpadTouch(intent.getBooleanExtra(EXTRA_XPAD_TOUCH, false),
                     intent.getIntExtra(EXTRA_XPAD_DIVISION, 2));
+            dsp.setXpadBank(intent.getIntExtra(EXTRA_XPAD_BANK, 0));
             return START_NOT_STICKY;
         }
         if (ACTION_ISOLATE.equals(action)) {
@@ -111,6 +113,7 @@ public class CaptureService extends Service {
             dsp.setXpadRoll(intent.getBooleanExtra(EXTRA_XPAD_ROLL, false));
             dsp.setXpadHold(intent.getBooleanExtra(EXTRA_XPAD_HOLD, false));
             dsp.setXpadTouch(false, intent.getIntExtra(EXTRA_XPAD_DIVISION, 2));
+            dsp.setXpadBank(intent.getIntExtra(EXTRA_XPAD_BANK, 0));
             int code = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
             Intent data = intent.getParcelableExtra(EXTRA_DATA);
             try {
