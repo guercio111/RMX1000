@@ -126,8 +126,13 @@ public class MainActivity extends Activity {
                         getWidth() / 2f, getHeight() - dp(8), paint);
             }
             private void updateTouch(float x) {
-                xpadDivision = Math.max(0, Math.min(4, (int)(x / Math.max(1f, getWidth() / 5f))));
-                xpadTouch = true; sendXpadState(); invalidate();
+                int selected = Math.max(0, Math.min(4, (int)(x / Math.max(1f, getWidth() / 5f))));
+                if (!xpadTouch || selected != xpadDivision) {
+                    xpadDivision = selected;
+                    xpadTouch = true;
+                    sendXpadState();
+                    invalidate();
+                }
             }
             @Override public boolean onTouchEvent(MotionEvent event) {
                 switch (event.getActionMasked()) {
