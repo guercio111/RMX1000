@@ -37,7 +37,8 @@ public final class DspProcessor {
     private final float[][] repeatR = new float[3][REPEAT_SAMPLES];
     private int repeatPosition;
     private long frameCounter;
-    private final float[] envelopes = new float[3];
+    private final float[] envelopesL = new float[3];
+    private final float[] envelopesR = new float[3];
 
     public DspProcessor() {
         for (int i = 0; i < lengths.length; i++) reverbLines[i] = new float[lengths[i] * 2];
@@ -115,7 +116,6 @@ public final class DspProcessor {
             float b1L = lowMidL - lowL, b1R = lowMidR - lowR;
             float b2L = outL - lowMidL, b2R = outR - lowMidR;
 
-            float[] unused = null; // no per-sample allocations in the audio callback
             float finalL = processBand(0, b0L, lowGain) +
                            processBand(1, b1L, midGain) +
                            processBand(2, b2L, highGain);
@@ -133,7 +133,6 @@ public final class DspProcessor {
 
     private float processBand(int band, float input, float gain) {
         float value = input * gain;
-        float setting = bandSetting(gain);
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain < 1f) value = input * gain;
             else if (gain > 1.0001f) value += repeatL[band][repeatPosition] * Math.min(0.65f, (gain - 1f) * 2.2f);
@@ -149,7 +148,7 @@ public final class DspProcessor {
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
             if (gain < 0.999f) {
-                envelopes[band] += (Math.abs(input) - envelopes[band]) * 0.025f;
+                envelopesL[band] += (Math.abs(input) - envelopesL[band]) * 0.025f;
                 float threshold = 0.012f + (1f - gain) * 0.22f;
                 if (envelopes[band] < threshold) value = 0f;
             } else if (gain > 1.0001f) {
@@ -176,7 +175,8 @@ public final class DspProcessor {
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
             if (gain < 0.999f) {
                 float threshold = 0.012f + (1f - gain) * 0.22f;
-                if (Math.abs(input) < threshold) value = 0f;
+                envelopesR[band] += (Math.abs(input) - envelopesR[band]) * 0.025f;
+                if (envelopesR[band] < threshold) value = 0f;
             } else if (gain > 1.0001f) {
                 float drive = 1f + (gain - 1f) * 8f;
                 value = softClip(value * drive) / softClip(drive);
@@ -185,7 +185,6 @@ public final class DspProcessor {
         return value;
     }
 
-    private float bandSetting(float gain) { return gain; }
     private float softClip(float x) { return x / (1f + Math.abs(x)); }
     private float clamp(float value) { return Math.max(-LIMIT, Math.min(LIMIT, value)); }
 }
