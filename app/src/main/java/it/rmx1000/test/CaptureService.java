@@ -70,6 +70,7 @@ public class CaptureService extends Service {
         }
         if (ACTION_START.equals(action) && !running.get()) {
             startForeground(NOTIFICATION_ID, buildNotification());
+            dsp.resetRhythm();
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
