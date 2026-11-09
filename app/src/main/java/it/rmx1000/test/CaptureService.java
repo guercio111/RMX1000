@@ -1,0 +1,164 @@
+package it.rmx1000.test;
+
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Service;
+import android.content.Intent;
+import android.media.AudioAttributes;
+import android.media.AudioFormat;
+import android.media.AudioPlaybackCaptureConfiguration;
+import android.media.AudioRecord;
+import android.media.AudioTrack;
+import android.media.MediaRecorder;
+import android.media.projection.MediaProjection;
+import android.media.projection.MediaProjectionManager;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.Process;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+public class CaptureService extends Service {
+    public static final String ACTION_START = "it.rmx1000.test.START";
+    public static final String ACTION_STOP = "it.rmx1000.test.STOP";
+    public static final String ACTION_ECHO = "it.rmx1000.test.ECHO";
+    public static final String EXTRA_RESULT_CODE = "result_code";
+    public static final String EXTRA_DATA = "projection_data";
+    public static final String EXTRA_ENABLED = "echo_enabled";
+    private static final String CHANNEL = "rmx_audio_capture";
+    private static final int NOTIFICATION_ID = 1001;
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private volatile boolean echoEnabled = true;
+    private volatile Thread audioThread;
+    private MediaProjection projection;
+    private AudioRecord recorder;
+    private AudioTrack player;
+
+    @Override public void onCreate() {
+        super.onCreate();
+        createNotificationChannel();
+    }
+
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null) return START_NOT_STICKY;
+        String action = intent.getAction();
+        if (ACTION_STOP.equals(action)) { stopEngine(); stopSelf(); return START_NOT_STICKY; }
+        if (ACTION_ECHO.equals(action)) { echoEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true); return START_NOT_STICKY; }
+        if (ACTION_START.equals(action) && !running.get()) {
+            startForeground(NOTIFICATION_ID, buildNotification());
+            echoEnabled = intent.getBooleanExtra(EXTRA_ENABLED, true);
+            int code = intent.getIntExtra(EXTRA_RESULT_CODE, 0);
+            Intent data = intent.getParcelableExtra(EXTRA_DATA);
+            try {
+                MediaProjectionManager mgr = (MediaProjectionManager)getSystemService(MEDIA_PROJECTION_SERVICE);
+                projection = mgr.getMediaProjection(code, data);
+                if (projection == null) throw new IllegalStateException("MediaProjection nulla");
+                projection.registerCallback(new MediaProjection.Callback() {
+                    @Override public void onStop() { stopEngine(); stopSelf(); }
+                }, null);
+                startEngine();
+            } catch (Exception e) {
+                stopEngine(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
+            }
+        }
+        return START_NOT_STICKY;
+    }
+
+    private void startEngine() throws Exception {
+        final int rate = 48000;
+        final int inMask = AudioFormat.CHANNEL_IN_STEREO;
+        final int outMask = AudioFormat.CHANNEL_OUT_STEREO;
+        AudioFormat inFormat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(inMask).build();
+        AudioPlaybackCaptureConfiguration config = new AudioPlaybackCaptureConfiguration.Builder(projection)
+                .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
+                .build();
+        int minIn = AudioRecord.getMinBufferSize(rate, inMask, AudioFormat.ENCODING_PCM_16BIT);
+        int inBytes = Math.max(minIn * 2, 8192);
+        recorder = new AudioRecord.Builder().setAudioFormat(inFormat).setBufferSizeInBytes(inBytes).setAudioPlaybackCaptureConfig(config).build();
+        if (recorder.getState() != AudioRecord.STATE_INITIALIZED) throw new IllegalStateException("AudioRecord non inizializzato");
+
+        AudioFormat outFormat = new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate).setChannelMask(outMask).build();
+        int minOut = AudioTrack.getMinBufferSize(rate, outMask, AudioFormat.ENCODING_PCM_16BIT);
+        player = new AudioTrack.Builder()
+                .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                .setAudioFormat(outFormat).setBufferSizeInBytes(Math.max(minOut * 2, 8192))
+                .setTransferMode(AudioTrack.MODE_STREAM).build();
+        if (player.getState() != AudioTrack.STATE_INITIALIZED) throw new IllegalStateException("AudioTrack non inizializzato");
+
+        running.set(true);
+        recorder.startRecording();
+        player.play();
+        audioThread = new Thread(() -> audioLoop(rate), "RMX-Audio-DSP");
+        audioThread.start();
+    }
+
+    private void audioLoop(int rate) {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
+        short[] pcm = new short[1024]; // 512 stereo frames
+        float[] delay = new float[(int)(rate * 0.25f) * 2];
+        int write = 0;
+        try {
+            while (running.get()) {
+                int n = recorder.read(pcm, 0, pcm.length, AudioRecord.READ_BLOCKING);
+                if (n <= 0) { if (n == AudioRecord.ERROR_DEAD_OBJECT) break; continue; }
+                int usable = n - (n % 2);
+                for (int i = 0; i < usable; i += 2) {
+                    float left = pcm[i] / 32768.0f;
+                    float right = pcm[i + 1] / 32768.0f;
+                    float dl = delay[write];
+                    float dr = delay[write + 1];
+                    float wetL = echoEnabled ? dl : 0f;
+                    float wetR = echoEnabled ? dr : 0f;
+                    float outL = left * 0.82f + wetL * 0.42f;
+                    float outR = right * 0.82f + wetR * 0.42f;
+                    delay[write] = clamp(left + dl * 0.32f);
+                    delay[write + 1] = clamp(right + dr * 0.32f);
+                    write += 2;
+                    if (write >= delay.length) write = 0;
+                    pcm[i] = (short)(clamp(outL) * 32767.0f);
+                    pcm[i + 1] = (short)(clamp(outR) * 32767.0f);
+                }
+                int offset = 0;
+                while (offset < usable && running.get()) {
+                    int written = player.write(pcm, offset, usable - offset, AudioTrack.WRITE_BLOCKING);
+                    if (written <= 0) break;
+                    offset += written;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            running.set(false);
+            releaseAudio();
+            stopForeground(STOP_FOREGROUND_REMOVE);
+            stopSelf();
+        }
+    }
+
+    private float clamp(float v) { return Math.max(-0.98f, Math.min(0.98f, v)); }
+    private synchronized void stopEngine() {
+        running.set(false);
+        if (recorder != null) { try { recorder.stop(); } catch (Exception ignored) {} }
+        if (player != null) { try { player.pause(); player.flush(); player.stop(); } catch (Exception ignored) {} }
+        MediaProjection oldProjection = projection;
+        projection = null;
+        if (oldProjection != null) { try { oldProjection.stop(); } catch (Exception ignored) {} }
+        Thread t = audioThread;
+        if (t == null || !t.isAlive() || t == Thread.currentThread()) releaseAudio();
+    }
+    private synchronized void releaseAudio() {
+        if (recorder != null) { try { recorder.release(); } catch (Exception ignored) {} recorder = null; }
+        if (player != null) { try { player.release(); } catch (Exception ignored) {} player = null; }
+    }
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel c = new NotificationChannel(CHANNEL, "RMX audio capture", NotificationManager.IMPORTANCE_LOW);
+            ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(c);
+        }
+    }
+    private Notification buildNotification() {
+        if (Build.VERSION.SDK_INT >= 26) return new Notification.Builder(this, CHANNEL).setContentTitle("RMX-1000 Audio Test").setContentText("Acquisizione audio in corso").setSmallIcon(android.R.drawable.ic_media_play).build();
+        return new Notification.Builder(this).setContentTitle("RMX-1000 Audio Test").setContentText("Acquisizione audio in corso").setSmallIcon(android.R.drawable.ic_media_play).build();
+    }
+    @Override public void onDestroy() { stopEngine(); super.onDestroy(); }
+    @Override public IBinder onBind(Intent intent) { return null; }
+}
