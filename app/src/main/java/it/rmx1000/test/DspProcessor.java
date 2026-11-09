@@ -151,7 +151,7 @@ public final class DspProcessor {
                     float bandR = sceneLpR - sceneHpR;
                     sceneHpL += (bandL - sceneHpL) * 0.018f;
                     sceneHpR += (bandR - sceneHpR) * 0.018f;
-                    float noiseAmount = fxSub1 * fxLevel * 0.30f;
+                    float noiseAmount = fxSub1 * fxLevel * 0.62f;
                     outL = left + bandL * noiseAmount;
                     outR = right + bandR * noiseAmount;
                 } else if (reverbMode) {
@@ -162,8 +162,8 @@ public final class DspProcessor {
                         sumL += a; sumR += b;
                         float crossL = (line % 2 == 0) ? right : left;
                         float crossR = (line % 2 == 0) ? left : right;
-                        float decay = 0.52f + fxSub1 * 0.34f;
-                        float feedback = mode == MODE_REVERB_DOWN ? decay * 0.92f : decay;
+                        float decay = 0.58f + fxSub1 * 0.38f;
+                        float feedback = mode == MODE_REVERB_DOWN ? decay * 0.82f : decay;
                         reverbLines[line][p] = clamp(left * 0.24f + a * feedback + crossL * 0.035f);
                         reverbLines[line][p + 1] = clamp(right * 0.24f + b * feedback + crossR * 0.035f);
                         p += 2;
@@ -175,14 +175,16 @@ public final class DspProcessor {
                     float damp = 0.04f + fxSub2 * 0.75f;
                     sceneLpL += (reverbL - sceneLpL) * damp;
                     sceneLpR += (reverbR - sceneLpR) * damp;
-                    if (mode == MODE_REVERB_DOWN) {
-                        sceneHpL += (sceneLpL - sceneHpL) * 0.035f;
-                        sceneHpR += (sceneLpR - sceneHpR) * 0.035f;
-                        reverbL = sceneLpL - sceneHpL;
-                        reverbR = sceneLpR - sceneHpR;
+                    if (mode == MODE_REVERB_UP || mode == MODE_SPIRAL_UP) {
+                        // Brighter, rising reverb: emphasize the upper tail.
+                        sceneHpL += (sceneLpL - sceneHpL) * 0.045f;
+                        sceneHpR += (sceneLpR - sceneHpR) * 0.045f;
+                        reverbL = (sceneLpL - sceneHpL) * 1.65f;
+                        reverbR = (sceneLpR - sceneHpR) * 1.65f;
                     } else {
-                        reverbL = sceneLpL;
-                        reverbR = sceneLpR;
+                        // Darker, falling reverb: keep the low/mid body and damp highs.
+                        reverbL = sceneLpL * 0.92f;
+                        reverbR = sceneLpR * 0.92f;
                     }
                     float wet = fxLevel * ((mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.62f : 0.78f);
                     outL = left + reverbL * wet;
@@ -220,17 +222,28 @@ public final class DspProcessor {
                     int delayFrames = (int)(beatSamples * (0.0625f + fxSub1 * 0.9375f));
                     delayFrames = Math.max(1500, Math.min(echo.length / 2 - 1, delayFrames));
                     int read = echoPosition - delayFrames * 2;
-                    if (read < 0) read += echo.length;
+                    float spiralMod = 0f;
+                    if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) {
+                        double direction = mode == MODE_SPIRAL_UP ? 1.0 : -1.0;
+                        spiralMod = (float)Math.sin(frameCounter * 0.00024 * direction) * fxSub2 * 420f;
+                        read -= (int)spiralMod * 2;
+                    }
+                    while (read < 0) read += echo.length;
+                    while (read >= echo.length) read -= echo.length;
                     float wetL = echo[read];
                     float wetR = echo[read + 1];
-                    float feedback = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.42f : 0.36f;
+                    float feedback;
+                    if (mode == MODE_ECHO) feedback = 0.10f + fxSub2 * 0.78f;
+                    else if (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) feedback = 0.48f + fxSub1 * 0.24f;
+                    else if (mode == MODE_CRUSH_ECHO) feedback = 0.20f + fxSub2 * 0.58f;
+                    else feedback = 0.28f;
                     echo[echoPosition] = clamp(inputL + wetL * feedback);
                     echo[echoPosition + 1] = clamp(inputR + wetR * feedback);
-                    float modulation = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN)
-                            ? (float)Math.sin(frameCounter * 0.00013) * fxSub2 * 0.12f : 0f;
-                    float wet = fxLevel * ((mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.60f : 0.82f);
-                    outL += wetL * wet * (1f + modulation);
-                    outR += wetR * wet * (1f - modulation);
+                    float pan = (mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN)
+                            ? (float)Math.sin(frameCounter * 0.00031) * fxSub2 * 0.22f : 0f;
+                    float wet = fxLevel * ((mode == MODE_SPIRAL_UP || mode == MODE_SPIRAL_DOWN) ? 0.76f : 0.88f);
+                    outL += wetL * wet * (1f + pan);
+                    outR += wetR * wet * (1f - pan);
                     if (mode == MODE_CRUSH_ECHO) {
                         outL = softClip(outL * 1.7f);
                         outR = softClip(outR * 1.7f);
