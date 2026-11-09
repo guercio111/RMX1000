@@ -30,7 +30,8 @@ public class CaptureService extends Service {
     public static final String EXTRA_BPM = "estimated_bpm";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
     public static final String EXTRA_FX_LEVEL = "fx_level";
-    public static final String EXTRA_FX_FEEDBACK = "fx_feedback";
+    public static final String EXTRA_FX_SUB1 = "fx_sub1";
+    public static final String EXTRA_FX_SUB2 = "fx_sub2";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
@@ -60,11 +61,11 @@ public class CaptureService extends Service {
         String action = intent.getAction();
         if (ACTION_STOP.equals(action)) { stopEngine(); stopSelf(); return START_NOT_STICKY; }
         if (ACTION_ECHO.equals(action)) {
-            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
+            dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false));
             return START_NOT_STICKY;
         }
         if (ACTION_MODE.equals(action)) {
-            dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
+            dsp.setMode(intent.getIntExtra(EXTRA_MODE, -1));
             return START_NOT_STICKY;
         }
         if (ACTION_ISOLATE_MODE.equals(action)) {
@@ -74,7 +75,9 @@ public class CaptureService extends Service {
         if (ACTION_FX_PARAM.equals(action)) {
             int parameter = intent.getIntExtra(EXTRA_FX_PARAM, 0);
             float value = intent.getFloatExtra(EXTRA_VALUE, 0.55f);
-            if (parameter == 0) dsp.setFxLevel(value); else dsp.setFxFeedback(value);
+            if (parameter == 0) dsp.setFxLevel(value);
+            else if (parameter == 1) dsp.setFxSub1(value);
+            else if (parameter == 2) dsp.setFxSub2(value);
             return START_NOT_STICKY;
         }
         if (ACTION_ISOLATE.equals(action)) {
@@ -86,9 +89,10 @@ public class CaptureService extends Service {
             dsp.resetRhythm();
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
             dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
-            dsp.setFxFeedback(intent.getFloatExtra(EXTRA_FX_FEEDBACK, 0.55f));
+            dsp.setFxSub1(intent.getFloatExtra(EXTRA_FX_SUB1, 0.50f));
+            dsp.setFxSub2(intent.getFloatExtra(EXTRA_FX_SUB2, 0.50f));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
-            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
+            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, -1));
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
             dsp.setIsolateBand(1, intent.getFloatExtra(EXTRA_MID, 0f));
             dsp.setIsolateBand(2, intent.getFloatExtra(EXTRA_HIGH, 0f));
