@@ -32,7 +32,7 @@ public final class DspProcessor {
     private float lowGain = 1f, midGain = 1f, highGain = 1f;
 
     // Approximate 1/8-beat repeat at 120 BPM (62.5 ms); editable timing comes later.
-    private static final int REPEAT_SAMPLES = 6000; // supports 1/8 beat down to 60 BPM
+    private static final int REPEAT_SAMPLES = 12000; // room for a 1/8-beat delay at 60 BPM
     private final float[][] repeatL = new float[3][REPEAT_SAMPLES];
     private final float[][] repeatR = new float[3][REPEAT_SAMPLES];
     private int repeatPosition;
