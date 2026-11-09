@@ -448,7 +448,7 @@ public final class DspProcessor {
         if (isolateMode < 0) return input;
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
-            if (gain > 1.0001f) value += repeatR[band][repeatReadPosition()] * Math.min(0.65f, (gain - 1f) * 2.2f);
+            if (gain > 1.0001f) value += repeatR[band][repeatReadPosition()] * Math.min(0.22f, (gain - 1f) * 0.80f);
             repeatR[band][repeatPosition] = input + repeatR[band][repeatReadPosition()] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
@@ -458,7 +458,7 @@ public final class DspProcessor {
                 float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
-                value += repeatR[band][repeatReadPosition()] * Math.min(0.8f, (gain - 1f) * 3.0f);
+                value += repeatR[band][repeatReadPosition()] * Math.min(0.24f, (gain - 1f) * 0.90f);
                 repeatR[band][repeatPosition] = input + repeatR[band][repeatReadPosition()] * 0.35f;
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
