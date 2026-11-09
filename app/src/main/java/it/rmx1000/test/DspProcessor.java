@@ -32,7 +32,7 @@ public final class DspProcessor {
     private float lowGain = 1f, midGain = 1f, highGain = 1f;
 
     // Approximate 1/8-beat repeat at 120 BPM (62.5 ms); editable timing comes later.
-    private static final int REPEAT_SAMPLES = 3000;
+    private static final int REPEAT_SAMPLES = 6000; // supports 1/8 beat down to 60 BPM
     private final float[][] repeatL = new float[3][REPEAT_SAMPLES];
     private final float[][] repeatR = new float[3][REPEAT_SAMPLES];
     private int repeatPosition;
@@ -194,8 +194,8 @@ public final class DspProcessor {
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain < 1f) value = input * gain;
-            else if (gain > 1.0001f) value += repeatL[band][repeatPosition] * Math.min(0.65f, (gain - 1f) * 2.2f);
-            repeatL[band][repeatPosition] = input + repeatL[band][repeatPosition] * 0.22f;
+            else if (gain > 1.0001f) value += repeatL[band][repeatReadPosition()] * Math.min(0.65f, (gain - 1f) * 2.2f);
+            repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
                 // Half-beat gate follows the adaptive low-frequency beat tracker.
@@ -205,8 +205,8 @@ public final class DspProcessor {
                 float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
-                value += repeatL[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
-                repeatL[band][repeatPosition] = input + repeatL[band][repeatPosition] * 0.35f;
+                value += repeatL[band][repeatReadPosition()] * Math.min(0.8f, (gain - 1f) * 3.0f);
+                repeatL[band][repeatPosition] = input + repeatL[band][repeatReadPosition()] * 0.35f;
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
             if (gain < 0.999f) {
@@ -224,8 +224,8 @@ public final class DspProcessor {
     private float processBandRight(int band, float input, float gain) {
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
-            if (gain > 1.0001f) value += repeatR[band][repeatPosition] * Math.min(0.65f, (gain - 1f) * 2.2f);
-            repeatR[band][repeatPosition] = input + repeatR[band][repeatPosition] * 0.22f;
+            if (gain > 1.0001f) value += repeatR[band][repeatReadPosition()] * Math.min(0.65f, (gain - 1f) * 2.2f);
+            repeatR[band][repeatPosition] = input + repeatR[band][repeatReadPosition()] * 0.22f;
         } else if (isolateMode == ISOLATE_TRANS_ROLL) {
             if (gain < 0.999f) {
                 long cycle = Math.max(8000L, beatSamples / 2L);
@@ -234,8 +234,8 @@ public final class DspProcessor {
                 float openFrames = cycle * (0.88f - cutAmount * 0.38f);
                 value *= phase < openFrames ? 1f : 0f;
             } else if (gain > 1.0001f) {
-                value += repeatR[band][repeatPosition] * Math.min(0.8f, (gain - 1f) * 3.0f);
-                repeatR[band][repeatPosition] = input + repeatR[band][repeatPosition] * 0.35f;
+                value += repeatR[band][repeatReadPosition()] * Math.min(0.8f, (gain - 1f) * 3.0f);
+                repeatR[band][repeatPosition] = input + repeatR[band][repeatReadPosition()] * 0.35f;
             }
         } else if (isolateMode == ISOLATE_GATE_DRIVE) {
             if (gain < 0.999f) {
@@ -248,6 +248,14 @@ public final class DspProcessor {
             }
         }
         return value;
+    }
+
+
+    private int repeatReadPosition() {
+        int delay = (int) Math.max(2000L, Math.min(6000L, beatSamples / 8L));
+        int read = repeatPosition - delay;
+        if (read < 0) read += REPEAT_SAMPLES;
+        return read;
     }
 
     private float softClip(float x) { return x / (1f + Math.abs(x)); }
