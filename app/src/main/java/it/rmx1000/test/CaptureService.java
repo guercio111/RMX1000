@@ -68,7 +68,7 @@ public class CaptureService extends Service {
             return START_NOT_STICKY;
         }
         if (ACTION_ISOLATE_MODE.equals(action)) {
-            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
+            dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, -1));
             return START_NOT_STICKY;
         }
         if (ACTION_FX_PARAM.equals(action)) {

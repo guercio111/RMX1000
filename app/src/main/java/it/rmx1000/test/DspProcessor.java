@@ -18,7 +18,7 @@ public final class DspProcessor {
     // FX controls are independent from the adaptive beat tracker.
     private volatile float fxLevel = 0.55f;
     private volatile float fxFeedback = 0.55f;
-    private volatile int isolateMode = ISOLATE_ISOLATOR;
+    private volatile int isolateMode = -1;
     private final float[] echo = new float[48000 / 4 * 2];
     private int echoPosition;
 
@@ -64,7 +64,7 @@ public final class DspProcessor {
         if (value == MODE_ECHO || value == MODE_REVERB) mode = value;
     }
     public void setIsolateMode(int value) {
-        if (value >= ISOLATE_ISOLATOR && value <= ISOLATE_GATE_DRIVE) isolateMode = value;
+        if (value == -1 || (value >= ISOLATE_ISOLATOR && value <= ISOLATE_GATE_DRIVE)) isolateMode = value;
     }
     public int getMode() { return mode; }
     public int getIsolateMode() { return isolateMode; }
@@ -279,6 +279,7 @@ public final class DspProcessor {
     }
 
     private float processBand(int band, float input, float gain) {
+        if (isolateMode < 0) return input;
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain < 1f) value = input * gain;
@@ -310,6 +311,7 @@ public final class DspProcessor {
     }
 
     private float processBandRight(int band, float input, float gain) {
+        if (isolateMode < 0) return input;
         float value = input * gain;
         if (isolateMode == ISOLATE_CUT_ADD) {
             if (gain > 1.0001f) value += repeatR[band][repeatReadPosition()] * Math.min(0.65f, (gain - 1f) * 2.2f);

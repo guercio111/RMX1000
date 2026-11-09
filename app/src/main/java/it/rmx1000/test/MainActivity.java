@@ -35,12 +35,12 @@ public class MainActivity extends Activity {
     };
     private Button fxButton;
     private Button modeButton;
-    private Button isolateModeButton;
+    private final Button[] isolateModeButtons = new Button[4];
     private TextView rangeNote;
     private boolean fxEnabled = true;
     private boolean captureStarted = false;
     private int fxMode = DspProcessor.MODE_ECHO;
-    private int isolateMode = DspProcessor.ISOLATE_ISOLATOR;
+    private int isolateMode = -1;
     private final float[] isolate = {0f, 0f, 0f};
     private float fxLevel = 0.55f;
     private float fxFeedback = 0.55f;
@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.7.1");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.8.0");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -151,36 +151,6 @@ public class MainActivity extends Activity {
         feedbackKnob.setValue(fxFeedback);
         fxControls.addView(feedbackKnob, new LinearLayout.LayoutParams(0, -1, 1f));
 
-        isolateModeButton = makeButton("ISOLATE FX  /  ISOLATOR", Color.rgb(95, 80, 145));
-        isolateModeButton.setOnClickListener(v -> {
-            isolateMode = (isolateMode + 1) % 4;
-            String[] names = {"ISOLATOR", "CUT / ADD", "TRANS / ROLL", "GATE / DRIVE"};
-            isolateModeButton.setText("ISOLATE FX  /  " + names[isolateMode]);
-            updateIsolateHint();
-            if (captureStarted) {
-                Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ISOLATE_MODE);
-                i.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
-                startService(i);
-            }
-        });
-        transport.addView(isolateModeButton, buttonParams());
-
-        TextView isolateTitle = new TextView(this);
-        isolateTitle.setText("ISOLATE FX");
-        isolateTitle.setTextColor(0xFFFFC928);
-        isolateTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
-        isolateTitle.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams itp = new LinearLayout.LayoutParams(-1, dp(38));
-        itp.topMargin = dp(3);
-        transport.addView(isolateTitle, itp);
-
-        rangeNote = new TextView(this);
-        updateIsolateHint();
-        rangeNote.setTextColor(Color.LTGRAY);
-        rangeNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
-        rangeNote.setGravity(Gravity.CENTER);
-        transport.addView(rangeNote, new LinearLayout.LayoutParams(-1, dp(34)));
-
         LinearLayout isolatePanel = new LinearLayout(this);
         isolatePanel.setOrientation(LinearLayout.VERTICAL);
         isolatePanel.setGravity(Gravity.CENTER);
@@ -189,12 +159,37 @@ public class MainActivity extends Activity {
         ip.leftMargin = dp(14);
         content.addView(isolatePanel, ip);
 
-        TextView isolateHint = new TextView(this);
-        isolateHint.setText("THREE-BAND ISOLATE FX  •  TOUCH AND DRAG");
-        isolateHint.setTextColor(0xFFBFC4CA);
-        isolateHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        isolateHint.setGravity(Gravity.CENTER);
-        isolatePanel.addView(isolateHint, new LinearLayout.LayoutParams(-1, dp(32)));
+        TextView isolateTitle = new TextView(this);
+        isolateTitle.setText("ISOLATE FX");
+        isolateTitle.setTextColor(0xFFFFC928);
+        isolateTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 19);
+        isolateTitle.setGravity(Gravity.CENTER);
+        isolatePanel.addView(isolateTitle, new LinearLayout.LayoutParams(-1, dp(34)));
+
+        LinearLayout isolateSelectRow = new LinearLayout(this);
+        isolateSelectRow.setOrientation(LinearLayout.HORIZONTAL);
+        isolateSelectRow.setGravity(Gravity.CENTER);
+        isolatePanel.addView(isolateSelectRow, new LinearLayout.LayoutParams(-1, dp(48)));
+        String[] isolateNames = {"ISOLATOR", "CUT / ADD", "TRANS / ROLL", "GATE / DRIVE"};
+        for (int mode = 0; mode < isolateNames.length; mode++) {
+            final int selected = mode;
+            Button selector = makeButton(isolateNames[mode], Color.rgb(70, 73, 80));
+            selector.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+            selector.setOnClickListener(v -> selectIsolateMode(selected));
+            isolateModeButtons[mode] = selector;
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(0, dp(42), 1f);
+            bp.leftMargin = dp(3);
+            bp.rightMargin = dp(3);
+            isolateSelectRow.addView(selector, bp);
+        }
+        updateIsolateButtons();
+
+        rangeNote = new TextView(this);
+        updateIsolateHint();
+        rangeNote.setTextColor(Color.LTGRAY);
+        rangeNote.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        rangeNote.setGravity(Gravity.CENTER);
+        isolatePanel.addView(rangeNote, new LinearLayout.LayoutParams(-1, dp(30)));
 
         LinearLayout knobs = new LinearLayout(this);
         knobs.setOrientation(LinearLayout.HORIZONTAL);
@@ -254,21 +249,45 @@ public class MainActivity extends Activity {
         startService(i);
     }
 
+    private void selectIsolateMode(int selected) {
+        isolateMode = (isolateMode == selected) ? -1 : selected;
+        updateIsolateButtons();
+        updateIsolateHint();
+        if (captureStarted) {
+            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_ISOLATE_MODE);
+            i.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
+            startService(i);
+        }
+    }
+
+    private void updateIsolateButtons() {
+        for (int i = 0; i < isolateModeButtons.length; i++) {
+            Button button = isolateModeButtons[i];
+            if (button != null) {
+                button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                        isolateMode == i ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+            }
+        }
+    }
+
     private void updateIsolateHint() {
         if (rangeNote == null) return;
         String hint;
         switch (isolateMode) {
+            case DspProcessor.ISOLATE_ISOLATOR:
+                hint = "CENTRO = NEUTRO  |  SINISTRA = RIDUCE  |  DESTRA = AUMENTA";
+                break;
             case DspProcessor.ISOLATE_CUT_ADD:
-                hint = "CENTRO = NEUTRO  |  SINISTRA = CUT  |  DESTRA = REPEAT";
+                hint = "CENTRO = NEUTRO  |  SINISTRA = CUT  |  DESTRA = DELAY 1/8";
                 break;
             case DspProcessor.ISOLATE_TRANS_ROLL:
-                hint = "CENTRO = NEUTRO  |  SINISTRA = TAGLIO RITMICO  |  DESTRA = ROLL";
+                hint = "CENTRO = NEUTRO  |  SINISTRA = TRANS  |  DESTRA = ROLL";
                 break;
             case DspProcessor.ISOLATE_GATE_DRIVE:
                 hint = "CENTRO = NEUTRO  |  SINISTRA = GATE  |  DESTRA = DRIVE";
                 break;
             default:
-                hint = "CENTRO = NEUTRO  |  SINISTRA = ATTENUAZIONE  |  DESTRA = BOOST";
+                hint = "SELEZIONA UN EFFETTO ISOLATE FX";
                 break;
         }
         rangeNote.setText(hint);
@@ -325,7 +344,7 @@ public class MainActivity extends Activity {
         try {
             startForegroundService(service);
             captureStarted = true;
-            status.setText("Cattura avviata. Regola LOW / MID / HIGH dal centro neutro.");
+            status.setText("Cattura avviata. Seleziona ISOLATE FX e regola LOW / MID / HI dal centro neutro.");
         } catch (Exception e) {
             captureStarted = false;
             status.setText("Avvio non riuscito: " + e.getClass().getSimpleName());
