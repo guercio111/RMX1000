@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
     private int fxMode = DspProcessor.MODE_ECHO;
     private int isolateMode = DspProcessor.ISOLATE_ISOLATOR;
     private final float[] isolate = {0f, 0f, 0f};
+    private float fxLevel = 0.55f;
+    private float fxFeedback = 0.55f;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -56,7 +58,7 @@ public class MainActivity extends Activity {
         root.setBackgroundColor(Color.rgb(24, 25, 28));
 
         TextView title = new TextView(this);
-        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.6.4");
+        title.setText("RMX-1000  /  AUDIO ENGINE TEST 0.7.0");
         title.setTextColor(Color.WHITE);
         title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 23);
         title.setGravity(Gravity.CENTER);
@@ -166,7 +168,26 @@ public class MainActivity extends Activity {
         isolateHint.setTextColor(0xFFBFC4CA);
         isolateHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         isolateHint.setGravity(Gravity.CENTER);
-        isolatePanel.addView(isolateHint, new LinearLayout.LayoutParams(-1, dp(38)));
+        isolatePanel.addView(isolateHint, new LinearLayout.LayoutParams(-1, dp(32)));
+
+        LinearLayout fxControls = new LinearLayout(this);
+        fxControls.setOrientation(LinearLayout.HORIZONTAL);
+        fxControls.setGravity(Gravity.CENTER);
+        isolatePanel.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(126)));
+
+        RotaryKnob levelKnob = new RotaryKnob(this, "FX LEVEL", 0f, 1f, "%", value -> {
+            fxLevel = value;
+            sendFxParameter(0, value);
+        });
+        levelKnob.setValue(fxLevel);
+        fxControls.addView(levelKnob, new LinearLayout.LayoutParams(0, -1, 1f));
+
+        RotaryKnob feedbackKnob = new RotaryKnob(this, "FEEDBACK", 0f, 1f, "%", value -> {
+            fxFeedback = value;
+            sendFxParameter(1, value);
+        });
+        feedbackKnob.setValue(fxFeedback);
+        fxControls.addView(feedbackKnob, new LinearLayout.LayoutParams(0, -1, 1f));
 
         LinearLayout knobs = new LinearLayout(this);
         knobs.setOrientation(LinearLayout.HORIZONTAL);
@@ -186,7 +207,7 @@ public class MainActivity extends Activity {
                 }
             });
             knob.setValue(isolate[band]);
-            knobs.addView(knob, new LinearLayout.LayoutParams(0, dp(210), 1f));
+            knobs.addView(knob, new LinearLayout.LayoutParams(0, dp(168), 1f));
         }
 
         content.addView(new LinearLayout(this), new LinearLayout.LayoutParams(0, 1));
@@ -216,6 +237,14 @@ public class MainActivity extends Activity {
             tempoReceiverRegistered = false;
         }
         super.onStop();
+    }
+
+    private void sendFxParameter(int parameter, float value) {
+        if (!captureStarted) return;
+        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_FX_PARAM);
+        i.putExtra(CaptureService.EXTRA_FX_PARAM, parameter);
+        i.putExtra(CaptureService.EXTRA_VALUE, value);
+        startService(i);
     }
 
     private void updateIsolateHint() {
@@ -279,6 +308,8 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode);
         service.putExtra(CaptureService.EXTRA_DATA, data);
         service.putExtra(CaptureService.EXTRA_ENABLED, fxEnabled);
+        service.putExtra(CaptureService.EXTRA_FX_LEVEL, fxLevel);
+        service.putExtra(CaptureService.EXTRA_FX_FEEDBACK, fxFeedback);
         service.putExtra(CaptureService.EXTRA_MODE, fxMode);
         service.putExtra(CaptureService.EXTRA_ISOLATE_MODE, isolateMode);
         service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);

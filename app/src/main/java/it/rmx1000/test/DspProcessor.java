@@ -15,6 +15,9 @@ public final class DspProcessor {
     private static final float LIMIT = 0.96f;
     private volatile int mode = MODE_ECHO;
     private volatile boolean enabled = true;
+    // FX controls are independent from the adaptive beat tracker.
+    private volatile float fxLevel = 0.55f;
+    private volatile float fxFeedback = 0.55f;
     private volatile int isolateMode = ISOLATE_ISOLATOR;
     private final float[] echo = new float[48000 / 4 * 2];
     private int echoPosition;
@@ -66,6 +69,8 @@ public final class DspProcessor {
     public int getMode() { return mode; }
     public int getIsolateMode() { return isolateMode; }
     public void setEnabled(boolean value) { enabled = value; }
+    public void setFxLevel(float value) { fxLevel = Math.max(0f, Math.min(1f, value)); }
+    public void setFxFeedback(float value) { fxFeedback = Math.max(0f, Math.min(1f, value)); }
 
     /** Current quarter-note estimate, intended for a lightweight UI diagnostic. */
     public float getEstimatedBpm() {
@@ -115,10 +120,13 @@ public final class DspProcessor {
 
             if (enabled && mode == MODE_ECHO) {
                 float wetL = echo[echoPosition], wetR = echo[echoPosition + 1];
-                echo[echoPosition] = clamp(left + wetL * 0.38f);
-                echo[echoPosition + 1] = clamp(right + wetR * 0.38f);
-                outL = left * 0.82f + wetL * 0.48f;
-                outR = right * 0.82f + wetR * 0.48f;
+                float feedback = 0.05f + fxFeedback * 0.60f;
+                echo[echoPosition] = clamp(left + wetL * feedback);
+                echo[echoPosition + 1] = clamp(right + wetR * feedback);
+                float dry = 1f - fxLevel * 0.3273f;
+                float wet = fxLevel * 0.8727f;
+                outL = left * dry + wetL * wet;
+                outR = right * dry + wetR * wet;
                 echoPosition += 2;
                 if (echoPosition >= echo.length) echoPosition = 0;
             } else if (enabled && mode == MODE_REVERB) {
@@ -129,16 +137,19 @@ public final class DspProcessor {
                     sumL += a; sumR += b;
                     float crossL = (line % 2 == 0) ? right : left;
                     float crossR = (line % 2 == 0) ? left : right;
-                    reverbLines[line][p] = clamp(left * 0.24f + a * 0.71f + crossL * 0.035f);
-                    reverbLines[line][p + 1] = clamp(right * 0.24f + b * 0.71f + crossR * 0.035f);
+                    float feedback = 0.55f + fxFeedback * 0.29f;
+                    reverbLines[line][p] = clamp(left * 0.24f + a * feedback + crossL * 0.035f);
+                    reverbLines[line][p + 1] = clamp(right * 0.24f + b * feedback + crossR * 0.035f);
                     p += 2;
                     if (p >= reverbLines[line].length) p = 0;
                     reverbPositions[line] = p;
                 }
                 lpLeft += (sumL * 0.25f - lpLeft) * 0.42f;
                 lpRight += (sumR * 0.25f - lpRight) * 0.42f;
-                outL = left * 0.78f + lpLeft * 0.42f;
-                outR = right * 0.78f + lpRight * 0.42f;
+                float dry = 1f - fxLevel * 0.40f;
+                float wet = fxLevel * 0.7636f;
+                outL = left * dry + lpLeft * wet;
+                outR = right * dry + lpRight * wet;
             }
 
             lowGain += (lowTargetGain - lowGain) * 0.0012f;

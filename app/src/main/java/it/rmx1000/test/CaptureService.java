@@ -26,7 +26,11 @@ public class CaptureService extends Service {
     public static final String ACTION_ISOLATE = "it.rmx1000.test.ISOLATE";
     public static final String ACTION_ISOLATE_MODE = "it.rmx1000.test.ISOLATE_MODE";
     public static final String ACTION_TEMPO = "it.rmx1000.test.TEMPO";
+    public static final String ACTION_FX_PARAM = "it.rmx1000.test.FX_PARAM";
     public static final String EXTRA_BPM = "estimated_bpm";
+    public static final String EXTRA_FX_PARAM = "fx_parameter";
+    public static final String EXTRA_FX_LEVEL = "fx_level";
+    public static final String EXTRA_FX_FEEDBACK = "fx_feedback";
     public static final String EXTRA_RESULT_CODE = "result_code";
     public static final String EXTRA_DATA = "projection_data";
     public static final String EXTRA_ENABLED = "echo_enabled";
@@ -67,6 +71,12 @@ public class CaptureService extends Service {
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
             return START_NOT_STICKY;
         }
+        if (ACTION_FX_PARAM.equals(action)) {
+            int parameter = intent.getIntExtra(EXTRA_FX_PARAM, 0);
+            float value = intent.getFloatExtra(EXTRA_VALUE, 0.55f);
+            if (parameter == 0) dsp.setFxLevel(value); else dsp.setFxFeedback(value);
+            return START_NOT_STICKY;
+        }
         if (ACTION_ISOLATE.equals(action)) {
             dsp.setIsolateBand(intent.getIntExtra(EXTRA_BAND, -1), intent.getFloatExtra(EXTRA_VALUE, 0f));
             return START_NOT_STICKY;
@@ -75,6 +85,8 @@ public class CaptureService extends Service {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.resetRhythm();
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, true));
+            dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
+            dsp.setFxFeedback(intent.getFloatExtra(EXTRA_FX_FEEDBACK, 0.55f));
             dsp.setMode(intent.getIntExtra(EXTRA_MODE, DspProcessor.MODE_ECHO));
             dsp.setIsolateMode(intent.getIntExtra(EXTRA_ISOLATE_MODE, DspProcessor.ISOLATE_ISOLATOR));
             dsp.setIsolateBand(0, intent.getFloatExtra(EXTRA_LOW, 0f));
