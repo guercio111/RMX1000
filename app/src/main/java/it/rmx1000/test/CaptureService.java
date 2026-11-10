@@ -28,7 +28,10 @@ public class CaptureService extends Service {
     public static final String ACTION_TEMPO = "it.rmx1000.test.TEMPO";
     public static final String ACTION_FX_PARAM = "it.rmx1000.test.FX_PARAM";
     public static final String ACTION_XPAD = "it.rmx1000.test.XPAD";
+    public static final String ACTION_CLOCK_CONTROL = "it.rmx1000.test.CLOCK_CONTROL";
     public static final String EXTRA_BPM = "estimated_bpm";
+    public static final String EXTRA_CLOCK_LOCKED = "clock_locked";
+    public static final String EXTRA_CLOCK_DELTA_BPM = "clock_delta_bpm";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
     public static final String EXTRA_FX_LEVEL = "fx_level";
     public static final String EXTRA_FX_SUB1 = "fx_sub1";
@@ -85,6 +88,11 @@ public class CaptureService extends Service {
             else if (parameter == 2) dsp.setFxSub2(value);
             return START_NOT_STICKY;
         }
+        if (ACTION_CLOCK_CONTROL.equals(action)) {
+            if (intent.hasExtra(EXTRA_CLOCK_LOCKED)) dsp.setTempoLocked(intent.getBooleanExtra(EXTRA_CLOCK_LOCKED, false));
+            if (intent.hasExtra(EXTRA_CLOCK_DELTA_BPM)) dsp.adjustTempo(intent.getFloatExtra(EXTRA_CLOCK_DELTA_BPM, 0f));
+            return START_NOT_STICKY;
+        }
         if (ACTION_XPAD.equals(action)) {
             dsp.setXpadRoll(intent.getBooleanExtra(EXTRA_XPAD_ROLL, false));
             dsp.setXpadHold(intent.getBooleanExtra(EXTRA_XPAD_HOLD, false));
@@ -99,6 +107,7 @@ public class CaptureService extends Service {
         if (ACTION_START.equals(action) && !running.get()) {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.resetRhythm();
+            dsp.setTempoLocked(intent.getBooleanExtra(EXTRA_CLOCK_LOCKED, false));
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false));
             dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
             dsp.setFxSub1(intent.getFloatExtra(EXTRA_FX_SUB1, 0.50f));
@@ -169,6 +178,7 @@ public class CaptureService extends Service {
                 if (now - lastTempoBroadcast >= 500L) {
                     Intent tempo = new Intent(ACTION_TEMPO).setPackage(getPackageName());
                     tempo.putExtra(EXTRA_BPM, dsp.getEstimatedBpm());
+                    tempo.putExtra(EXTRA_CLOCK_LOCKED, dsp.isTempoLocked());
                     sendBroadcast(tempo);
                     lastTempoBroadcast = now;
                 }
