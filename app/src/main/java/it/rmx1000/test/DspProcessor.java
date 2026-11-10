@@ -62,7 +62,8 @@ public final class DspProcessor {
     private int repeatPosition;
     private long frameCounter;
     // Adaptive beat tracker driven by low-band transients (kick/bass attacks).
-    private long beatSamples = 24000L; // 120 BPM fallback at 48 kHz
+    private volatile long beatSamples = 24000L; // 120 BPM fallback at 48 kHz
+    private volatile boolean tempoLocked = false;
     private long rhythmPhase;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
@@ -145,11 +146,23 @@ public final class DspProcessor {
         return 2880000f / Math.max(1L, beatSamples);
     }
 
+    public boolean isTempoLocked() { return tempoLocked; }
+
+    public void setTempoLocked(boolean locked) { tempoLocked = locked; }
+
+    /** Fine manual correction: each UI arrow press changes the tempo by 0.1 BPM. */
+    public void adjustTempo(float deltaBpm) {
+        float bpm = getEstimatedBpm() + deltaBpm;
+        bpm = Math.max(60f, Math.min(180f, bpm));
+        beatSamples = Math.round(2880000f / bpm);
+    }
+
     /** Reset rhythmic phase and repeat memory at the beginning of a new capture. */
     public void resetRhythm() {
         frameCounter = 0L;
         rhythmPhase = 0L;
         beatSamples = 24000L;
+        tempoLocked = false;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
         tempoCandidateCount = 0;
@@ -436,6 +449,9 @@ public final class DspProcessor {
         float bass = (Math.abs(lowLeft) + Math.abs(lowRight)) * 0.5f;
         bassFast += (bass - bassFast) * (bass > bassFast ? 0.10f : 0.0025f);
         bassSlow += (bass - bassSlow) * 0.00022f;
+
+        // LOCK freezes the detected tempo and lets the beat phase run freely.
+        if (tempoLocked) return;
 
         // A long gap usually means silence or a track change. Keep the last BPM
         // as a starting point, but discard interval history tied to the old track.
