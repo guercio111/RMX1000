@@ -66,6 +66,7 @@ public final class DspProcessor {
     private volatile boolean tempoLocked = false;
     private volatile long lockBaseBeatSamples = 24000L;
     private volatile float tempoTrimBpm = 0f;
+    private volatile boolean beatSyncPending = false;
     private long rhythmPhase;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
@@ -165,6 +166,21 @@ public final class DspProcessor {
         else lockBaseBeatSamples = beatSamples;
     }
 
+    /** Reacquire the next detected musical attack as the beat-one phase reference. */
+    public void requestBeatSync() {
+        tempoLocked = false;
+        tempoTrimBpm = 0f;
+        lockBaseBeatSamples = beatSamples;
+        beatSyncPending = true;
+        lastOnsetFrame = -1L;
+        tempoCandidateCount = 0;
+        tempoCandidatePosition = 0;
+        challengerBeatSamples = 0L;
+        challengerCount = 0;
+        java.util.Arrays.fill(tempoCandidates, beatSamples);
+        java.util.Arrays.fill(tempoScratch, beatSamples);
+    }
+
     public void resetTempoToAuto() {
         tempoLocked = false;
         tempoTrimBpm = 0f;
@@ -189,6 +205,7 @@ public final class DspProcessor {
         beatSamples = 24000L;
         tempoLocked = false;
         tempoTrimBpm = 0f;
+        beatSyncPending = false;
         lockBaseBeatSamples = 24000L;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
@@ -579,6 +596,7 @@ public final class DspProcessor {
         }
         lastOnsetFrame = frameCounter;
         rhythmPhase = 0L;
+        if (beatSyncPending) beatSyncPending = false;
     }
 
     private float processBand(int band, float input, float gain) {
