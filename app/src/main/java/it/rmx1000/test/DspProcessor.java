@@ -66,6 +66,11 @@ public final class DspProcessor {
     private long rhythmPhase;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
+    // Five recent beat-length candidates: rejects stray bass attacks without tempo-challenger jumps.
+    private final long[] tempoCandidates = new long[5];
+    private final long[] tempoScratch = new long[5];
+    private int tempoCandidateCount;
+    private int tempoCandidatePosition;
     private final float[] envelopesL = new float[3];
     private final float[] envelopesR = new float[3];
 
@@ -111,6 +116,10 @@ public final class DspProcessor {
         beatSamples = 24000L;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
+        tempoCandidateCount = 0;
+        tempoCandidatePosition = 0;
+        java.util.Arrays.fill(tempoCandidates, 24000L);
+        java.util.Arrays.fill(tempoScratch, 24000L);
         repeatPosition = 0;
 
         for (int band = 0; band < 3; band++) {
@@ -386,7 +395,25 @@ public final class DspProcessor {
                         }
                     }
                 }
-                beatSamples += (long) ((best - beatSamples) * 0.12f);
+
+                // Median-only refinement from the previously stable v0.6.3 tracker.
+                // Unlike the later challenger logic, it never abruptly snaps or resets phase.
+                tempoCandidates[tempoCandidatePosition] = best;
+                tempoCandidatePosition = (tempoCandidatePosition + 1) % tempoCandidates.length;
+                if (tempoCandidateCount < tempoCandidates.length) tempoCandidateCount++;
+
+                for (int i = 0; i < tempoCandidateCount; i++) tempoScratch[i] = tempoCandidates[i];
+                for (int i = 1; i < tempoCandidateCount; i++) {
+                    long value = tempoScratch[i];
+                    int j = i - 1;
+                    while (j >= 0 && tempoScratch[j] > value) {
+                        tempoScratch[j + 1] = tempoScratch[j];
+                        j--;
+                    }
+                    tempoScratch[j + 1] = value;
+                }
+                long median = tempoScratch[tempoCandidateCount / 2];
+                beatSamples += (long) ((median - beatSamples) * 0.08f);
             }
         }
         lastOnsetFrame = frameCounter;
