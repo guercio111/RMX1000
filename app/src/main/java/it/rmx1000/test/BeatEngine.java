@@ -73,14 +73,16 @@ public final class BeatEngine {
                 float low = Math.abs(lowState[0]);
                 float mid = Math.abs(lowState[1] - lowState[0]);
                 float high = Math.abs(x - lowState[2]);
-                float[] bands = {low, mid, high};
                 float flux = 0f;
-                for (int b = 0; b < 3; b++) {
-                    float value = bands[b];
-                    float rise = value - previousBands[b];
-                    if (rise > 0f) flux += rise * (b == 0 ? 1.0f : 1.25f);
-                    previousBands[b] = value * 0.88f + previousBands[b] * 0.12f;
-                }
+                float riseLow = low - previousBands[0];
+                float riseMid = mid - previousBands[1];
+                float riseHigh = high - previousBands[2];
+                if (riseLow > 0f) flux += riseLow;
+                if (riseMid > 0f) flux += riseMid * 1.25f;
+                if (riseHigh > 0f) flux += riseHigh * 1.25f;
+                previousBands[0] = low * 0.88f + previousBands[0] * 0.12f;
+                previousBands[1] = mid * 0.88f + previousBands[1] * 0.12f;
+                previousBands[2] = high * 0.88f + previousBands[2] * 0.12f;
                 float rms = (float)Math.sqrt(frameEnergy / HOP);
                 float onset = flux * Math.min(1f, rms * 7f);
                 novelty[ringWrite] = onset;
