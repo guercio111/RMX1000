@@ -32,6 +32,9 @@ public class CaptureService extends Service {
     public static final String EXTRA_BPM = "estimated_bpm";
     public static final String EXTRA_CLOCK_LOCKED = "clock_locked";
     public static final String EXTRA_CLOCK_DELTA_BPM = "clock_delta_bpm";
+    public static final String EXTRA_CLOCK_TRIM_BPM = "clock_trim_bpm";
+    public static final String EXTRA_CLOCK_RESET_AUTO = "clock_reset_auto";
+    public static final String EXTRA_CLOCK_RESET_FADER = "clock_reset_fader";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
     public static final String EXTRA_FX_LEVEL = "fx_level";
     public static final String EXTRA_FX_SUB1 = "fx_sub1";
@@ -89,7 +92,10 @@ public class CaptureService extends Service {
             return START_NOT_STICKY;
         }
         if (ACTION_CLOCK_CONTROL.equals(action)) {
+            if (intent.getBooleanExtra(EXTRA_CLOCK_RESET_AUTO, false)) dsp.resetTempoToAuto();
+            if (intent.getBooleanExtra(EXTRA_CLOCK_RESET_FADER, false)) dsp.resetTempoFader();
             if (intent.hasExtra(EXTRA_CLOCK_LOCKED)) dsp.setTempoLocked(intent.getBooleanExtra(EXTRA_CLOCK_LOCKED, false));
+            if (intent.hasExtra(EXTRA_CLOCK_TRIM_BPM)) dsp.setTempoTrim(intent.getFloatExtra(EXTRA_CLOCK_TRIM_BPM, 0f));
             if (intent.hasExtra(EXTRA_CLOCK_DELTA_BPM)) dsp.adjustTempo(intent.getFloatExtra(EXTRA_CLOCK_DELTA_BPM, 0f));
             return START_NOT_STICKY;
         }
@@ -108,6 +114,7 @@ public class CaptureService extends Service {
             startForeground(NOTIFICATION_ID, buildNotification());
             dsp.resetRhythm();
             dsp.setTempoLocked(intent.getBooleanExtra(EXTRA_CLOCK_LOCKED, false));
+            dsp.setTempoTrim(intent.getFloatExtra(EXTRA_CLOCK_TRIM_BPM, 0f));
             dsp.setEnabled(intent.getBooleanExtra(EXTRA_ENABLED, false));
             dsp.setFxLevel(intent.getFloatExtra(EXTRA_FX_LEVEL, 0.55f));
             dsp.setFxSub1(intent.getFloatExtra(EXTRA_FX_SUB1, 0.50f));
@@ -179,6 +186,7 @@ public class CaptureService extends Service {
                     Intent tempo = new Intent(ACTION_TEMPO).setPackage(getPackageName());
                     tempo.putExtra(EXTRA_BPM, dsp.getEstimatedBpm());
                     tempo.putExtra(EXTRA_CLOCK_LOCKED, dsp.isTempoLocked());
+                    tempo.putExtra(EXTRA_CLOCK_TRIM_BPM, dsp.getTempoTrimBpm());
                     sendBroadcast(tempo);
                     lastTempoBroadcast = now;
                 }
