@@ -76,16 +76,6 @@ public final class DspProcessor {
     private int challengerCount;
     private final float[] envelopesL = new float[3];
     private final float[] envelopesR = new float[3];
-    // X-PAD ROLL capture/playback ring: up to two beats at 60 BPM.
-    private final float[] xpadHistory = new float[48000 * 2 * 2];
-    private final float[] xpadLoop = new float[48000 * 2 * 2];
-    private int xpadHistoryPosition, xpadLoopFrames, xpadLoopPosition;
-    private volatile boolean xpadRoll, xpadHold, xpadTouchDown;
-    private volatile int xpadDivisionIndex = 2;
-    private boolean xpadWasTouchDown;
-    private volatile boolean xpadActive;
-    private int xpadActiveDivision = -1;
-
 
     public DspProcessor() {
         for (int i = 0; i < lengths.length; i++) reverbLines[i] = new float[lengths[i] * 2];
@@ -117,29 +107,6 @@ public final class DspProcessor {
     public void setFxLevel(float value) { fxLevel = Math.max(0f, Math.min(1f, value)); }
     public void setFxSub1(float value) { fxSub1 = Math.max(0f, Math.min(1f, value)); }
     public void setFxSub2(float value) { fxSub2 = Math.max(0f, Math.min(1f, value)); }
-    public void setXpadRoll(boolean value) { xpadRoll = value; if (!value) xpadActive = false; }
-    public void setXpadHold(boolean value) { xpadHold = value; if (!value && !xpadTouchDown) xpadActive = false; }
-    public void setXpadTouch(boolean down, int divisionIndex) {
-        xpadDivisionIndex = Math.max(0, Math.min(4, divisionIndex));
-        xpadTouchDown = down;
-    }
-    private void captureXpadLoop(int divisionIndex) {
-        final float[] beats = {0.125f, 0.25f, 0.5f, 1f, 2f};
-        int frames = (int)Math.round(beatSamples * beats[divisionIndex]);
-        frames = Math.max(32, Math.min(xpadLoop.length / 2, frames));
-        int start = xpadHistoryPosition - frames * 2;
-        while (start < 0) start += xpadHistory.length;
-        for (int frame = 0; frame < frames; frame++) {
-            int src = start + frame * 2;
-            if (src >= xpadHistory.length) src -= xpadHistory.length;
-            xpadLoop[frame * 2] = xpadHistory[src];
-            xpadLoop[frame * 2 + 1] = xpadHistory[src + 1];
-        }
-        xpadLoopFrames = frames; xpadLoopPosition = 0;
-        xpadActiveDivision = divisionIndex; xpadActive = true;
-    }
-
-
     /** Current quarter-note estimate, intended for a lightweight UI diagnostic. */
     public float getEstimatedBpm() {
         return 2880000f / Math.max(1L, beatSamples);
@@ -159,10 +126,6 @@ public final class DspProcessor {
         java.util.Arrays.fill(tempoCandidates, 24000L);
         java.util.Arrays.fill(tempoScratch, 24000L);
         repeatPosition = 0;
-        xpadHistoryPosition = xpadLoopPosition = xpadLoopFrames = 0;
-        xpadWasTouchDown = xpadActive = false; xpadActiveDivision = -1;
-        java.util.Arrays.fill(xpadHistory, 0f);
-        java.util.Arrays.fill(xpadLoop, 0f);
 
         for (int band = 0; band < 3; band++) {
             java.util.Arrays.fill(repeatL[band], 0f);
@@ -198,17 +161,6 @@ public final class DspProcessor {
             float left = pcm[i] / 32768.0f;
             float right = pcm[i + 1] / 32768.0f;
             float outL = left, outR = right;
-
-            xpadHistory[xpadHistoryPosition] = left;
-            xpadHistory[xpadHistoryPosition + 1] = right;
-            xpadHistoryPosition += 2;
-            if (xpadHistoryPosition >= xpadHistory.length) xpadHistoryPosition = 0;
-            if (xpadRoll && xpadTouchDown &&
-                    (!xpadActive || !xpadWasTouchDown || xpadActiveDivision != xpadDivisionIndex)) {
-                captureXpadLoop(xpadDivisionIndex);
-            }
-            if (xpadWasTouchDown && !xpadTouchDown && !xpadHold) xpadActive = false;
-            xpadWasTouchDown = xpadTouchDown;
 
 
             if (enabled && mode >= 0) {
@@ -386,14 +338,6 @@ public final class DspProcessor {
                     }
                     echoPosition += 2; if (echoPosition >= echo.length) echoPosition = 0;
                 }
-            }
-
-            if (xpadRoll && xpadActive && xpadLoopFrames > 0) {
-                int xp = xpadLoopPosition * 2;
-                outL = clamp(outL + xpadLoop[xp] * 0.72f);
-                outR = clamp(outR + xpadLoop[xp + 1] * 0.72f);
-                xpadLoopPosition++;
-                if (xpadLoopPosition >= xpadLoopFrames) xpadLoopPosition = 0;
             }
 
             lowGain += (lowTargetGain - lowGain) * 0.0012f;
