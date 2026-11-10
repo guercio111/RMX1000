@@ -69,14 +69,14 @@ public final class MainActivity extends Activity {
         Intent i=new Intent(this,CaptureService.class).setAction(CaptureService.FX).putExtra(CaptureService.EXTRA_FX_SEND,value/100f);
         startService(i);
     }
+    private interface SendListener { void changed(int value); }
     private final class RotarySend extends View {
-        interface Listener { void changed(int value); }
         private final Paint paint=new Paint(3);
         private final RectF arc=new RectF();
-        private final Listener listener;
+        private final SendListener listener;
         private int value=0;
         private float downY,lastY;
-        RotarySend(Context context,Listener listener){super(context);this.listener=listener;setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
+        RotarySend(Context context,SendListener listener){super(context);this.listener=listener;setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
         void setValue(int v){value=Math.max(0,Math.min(100,v));invalidate();}
         @Override protected void onDraw(Canvas canvas){
             super.onDraw(canvas);
