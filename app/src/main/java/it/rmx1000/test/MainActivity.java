@@ -28,12 +28,16 @@ public class MainActivity extends Activity {
     private MediaProjectionManager projectionManager;
     private TextView status;
     private TextView tempoView;
+    private Button clockLockButton;
+    private boolean clockLocked = false;
     private boolean tempoReceiverRegistered;
     private final BroadcastReceiver tempoReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (CaptureService.ACTION_TEMPO.equals(intent.getAction()) && tempoView != null) {
                 float bpm = intent.getFloatExtra(CaptureService.EXTRA_BPM, 0f);
-                tempoView.setText(String.format(Locale.ROOT, "CLOCK  %.1f BPM  •  STIMA", bpm));
+                clockLocked = intent.getBooleanExtra(CaptureService.EXTRA_CLOCK_LOCKED, false);
+                tempoView.setText(String.format(Locale.ROOT, "CLOCK  %.1f BPM  •  %s", bpm, clockLocked ? "LOCK" : "AUTO"));
+                updateClockLockButton();
             }
         }
     };
@@ -84,7 +88,27 @@ public class MainActivity extends Activity {
         tempoView.setTextColor(0xFFFFC928);
         tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         tempoView.setGravity(Gravity.CENTER);
-        root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(32)));
+        root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(30)));
+
+        LinearLayout clockControls = new LinearLayout(this);
+        clockControls.setOrientation(LinearLayout.HORIZONTAL);
+        clockControls.setGravity(Gravity.CENTER);
+        Button slower = makeButton("◀", Color.rgb(70, 73, 80));
+        slower.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        slower.setOnClickListener(v -> adjustClockTempo(-0.1f));
+        clockControls.addView(slower, new LinearLayout.LayoutParams(dp(64), dp(32)));
+        clockLockButton = makeButton("LOCK", Color.rgb(70, 73, 80));
+        clockLockButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        clockLockButton.setOnClickListener(v -> setClockLocked(!clockLocked));
+        LinearLayout.LayoutParams lockParams = new LinearLayout.LayoutParams(dp(104), dp(32));
+        lockParams.setMargins(dp(8), 0, dp(8), 0);
+        clockControls.addView(clockLockButton, lockParams);
+        Button faster = makeButton("▶", Color.rgb(70, 73, 80));
+        faster.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        faster.setOnClickListener(v -> adjustClockTempo(0.1f));
+        clockControls.addView(faster, new LinearLayout.LayoutParams(dp(64), dp(32)));
+        root.addView(clockControls, new LinearLayout.LayoutParams(-1, dp(36)));
+        updateClockLockButton();
 
         // Pioneer X-PAD FX: five touch zones, from 1/8 to 2/1 beat.
         LinearLayout xpadPanel = new LinearLayout(this);
@@ -371,6 +395,31 @@ public class MainActivity extends Activity {
         startService(i);
     }
 
+    private void setClockLocked(boolean locked) {
+        clockLocked = locked;
+        updateClockLockButton();
+        if (captureStarted) {
+            Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
+            i.putExtra(CaptureService.EXTRA_CLOCK_LOCKED, locked);
+            startService(i);
+        }
+    }
+
+    private void adjustClockTempo(float deltaBpm) {
+        if (!captureStarted) return;
+        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
+        i.putExtra(CaptureService.EXTRA_CLOCK_DELTA_BPM, deltaBpm);
+        startService(i);
+    }
+
+    private void updateClockLockButton() {
+        if (clockLockButton != null) {
+            clockLockButton.setText(clockLocked ? "LOCK ON" : "LOCK");
+            clockLockButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                    clockLocked ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
+        }
+    }
+
     private void updateXpadButtons() {
         if (xpadRollButton != null) xpadRollButton.setBackgroundTintList(
                 android.content.res.ColorStateList.valueOf(xpadRoll ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
@@ -529,6 +578,7 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_XPAD_HOLD, xpadHold);
         service.putExtra(CaptureService.EXTRA_XPAD_TOUCH, false);
         service.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
+        service.putExtra(CaptureService.EXTRA_CLOCK_LOCKED, clockLocked);
         try {
             startForegroundService(service);
             captureStarted = true;
