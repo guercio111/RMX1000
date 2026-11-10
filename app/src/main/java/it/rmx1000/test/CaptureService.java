@@ -35,6 +35,7 @@ public class CaptureService extends Service {
     public static final String EXTRA_CLOCK_TRIM_BPM = "clock_trim_bpm";
     public static final String EXTRA_CLOCK_RESET_AUTO = "clock_reset_auto";
     public static final String EXTRA_CLOCK_RESET_FADER = "clock_reset_fader";
+    public static final String EXTRA_CLOCK_SYNC = "clock_sync";
     public static final String EXTRA_FX_PARAM = "fx_parameter";
     public static final String EXTRA_FX_LEVEL = "fx_level";
     public static final String EXTRA_FX_SUB1 = "fx_sub1";
@@ -92,6 +93,7 @@ public class CaptureService extends Service {
             return START_NOT_STICKY;
         }
         if (ACTION_CLOCK_CONTROL.equals(action)) {
+            if (intent.getBooleanExtra(EXTRA_CLOCK_SYNC, false)) dsp.requestBeatSync();
             if (intent.getBooleanExtra(EXTRA_CLOCK_RESET_AUTO, false)) dsp.resetTempoToAuto();
             if (intent.getBooleanExtra(EXTRA_CLOCK_RESET_FADER, false)) dsp.resetTempoFader();
             if (intent.hasExtra(EXTRA_CLOCK_LOCKED)) dsp.setTempoLocked(intent.getBooleanExtra(EXTRA_CLOCK_LOCKED, false));
