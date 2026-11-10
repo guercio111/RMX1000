@@ -8,7 +8,7 @@ android {
         applicationId 'it.rmx1000.test'
         minSdk 29
         targetSdk 35
-        versionCode 30
-        versionName '1.4.5-no-xpad-test'
+        versionCode 31
+        versionName '1.4.6-no-xpad-old-clock'
     }
 }
