@@ -49,10 +49,6 @@ public class MainActivity extends Activity {
     private float fxLevel = 0.55f;
     private float fxSub1 = 0.50f;
     private float fxSub2 = 0.50f;
-    private Button xpadRollButton, xpadHoldButton;
-    private boolean xpadRoll = false, xpadHold = false, xpadTouch = false;
-    private int xpadDivision = 2;
-
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         projectionManager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
@@ -85,67 +81,6 @@ public class MainActivity extends Activity {
         tempoView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
         tempoView.setGravity(Gravity.CENTER);
         root.addView(tempoView, new LinearLayout.LayoutParams(-1, dp(32)));
-
-        // Pioneer X-PAD FX: five touch zones, from 1/8 to 2/1 beat.
-        LinearLayout xpadPanel = new LinearLayout(this);
-        xpadPanel.setOrientation(LinearLayout.HORIZONTAL);
-        xpadPanel.setGravity(Gravity.CENTER_VERTICAL);
-        xpadPanel.setPadding(dp(6), dp(3), dp(6), dp(3));
-        xpadPanel.setBackgroundColor(Color.rgb(31, 33, 38));
-        LinearLayout xpadButtons = new LinearLayout(this);
-        xpadButtons.setOrientation(LinearLayout.VERTICAL);
-        xpadButtons.setGravity(Gravity.CENTER);
-        xpadPanel.addView(xpadButtons, new LinearLayout.LayoutParams(dp(112), -1));
-        TextView xpadTitle = new TextView(this);
-        xpadTitle.setText("X-PAD FX");
-        xpadTitle.setTextColor(0xFFFFC928);
-        xpadTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        xpadTitle.setGravity(Gravity.CENTER);
-        xpadButtons.addView(xpadTitle, new LinearLayout.LayoutParams(-1, dp(22)));
-        xpadRollButton = makeButton("ROLL", Color.rgb(70, 73, 80));
-        xpadRollButton.setOnClickListener(v -> { xpadRoll = !xpadRoll; updateXpadButtons(); sendXpadState(); });
-        xpadButtons.addView(xpadRollButton, new LinearLayout.LayoutParams(-1, dp(30)));
-        xpadHoldButton = makeButton("HOLD", Color.rgb(70, 73, 80));
-        xpadHoldButton.setOnClickListener(v -> { xpadHold = !xpadHold; updateXpadButtons(); sendXpadState(); });
-        xpadButtons.addView(xpadHoldButton, new LinearLayout.LayoutParams(-1, dp(30)));
-        View xpadSurface = new View(this) {
-            private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            private final String[] divisions = {"1/8", "1/4", "1/2", "1/1", "2/1"};
-            @Override protected void onDraw(Canvas canvas) {
-                super.onDraw(canvas);
-                float zone = getWidth() / 5f;
-                for (int i = 0; i < 5; i++) {
-                    paint.setColor(i == xpadDivision ? 0xFFB47D16 : 0xFF454950);
-                    canvas.drawRect(i * zone + dp(2), dp(3), (i + 1) * zone - dp(2), getHeight() - dp(3), paint);
-                    paint.setColor(Color.WHITE); paint.setTextAlign(Paint.Align.CENTER);
-                    paint.setTextSize(dp(16));
-                    canvas.drawText(divisions[i], (i + 0.5f) * zone, getHeight() * 0.56f, paint);
-                }
-                paint.setTextSize(dp(9)); paint.setColor(0xFFCCCCCC);
-                canvas.drawText(xpadRoll ? "TOCCA E MANTIENI • ROLL" : "ATTIVA ROLL PER CAMPIONARE",
-                        getWidth() / 2f, getHeight() - dp(8), paint);
-            }
-            private void updateTouch(float x) {
-                int selected = Math.max(0, Math.min(4, (int)(x / Math.max(1f, getWidth() / 5f))));
-                if (!xpadTouch || selected != xpadDivision) {
-                    xpadDivision = selected;
-                    xpadTouch = true;
-                    sendXpadState();
-                    invalidate();
-                }
-            }
-            @Override public boolean onTouchEvent(MotionEvent event) {
-                switch (event.getActionMasked()) {
-                    case MotionEvent.ACTION_DOWN:
-                    case MotionEvent.ACTION_MOVE: updateTouch(event.getX()); return true;
-                    case MotionEvent.ACTION_UP:
-                    case MotionEvent.ACTION_CANCEL: xpadTouch = false; sendXpadState(); invalidate(); return true;
-                    default: return true;
-                }
-            }
-        };
-        xpadPanel.addView(xpadSurface, new LinearLayout.LayoutParams(0, -1, 1f));
-        root.addView(xpadPanel, new LinearLayout.LayoutParams(-1, dp(88)));
 
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.HORIZONTAL);
@@ -371,23 +306,6 @@ public class MainActivity extends Activity {
         startService(i);
     }
 
-    private void updateXpadButtons() {
-        if (xpadRollButton != null) xpadRollButton.setBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(xpadRoll ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
-        if (xpadHoldButton != null) xpadHoldButton.setBackgroundTintList(
-                android.content.res.ColorStateList.valueOf(xpadHold ? Color.rgb(35, 145, 80) : Color.rgb(70, 73, 80)));
-    }
-
-    private void sendXpadState() {
-        if (!captureStarted) return;
-        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_XPAD);
-        i.putExtra(CaptureService.EXTRA_XPAD_ROLL, xpadRoll);
-        i.putExtra(CaptureService.EXTRA_XPAD_HOLD, xpadHold);
-        i.putExtra(CaptureService.EXTRA_XPAD_TOUCH, xpadTouch);
-        i.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
-        startService(i);
-    }
-
     private void selectSceneFx(int selected) {
         fxMode = (fxMode == selected) ? -1 : selected;
         fxEnabled = fxMode >= 0;
@@ -525,10 +443,6 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_LOW, isolate[0]);
         service.putExtra(CaptureService.EXTRA_MID, isolate[1]);
         service.putExtra(CaptureService.EXTRA_HIGH, isolate[2]);
-        service.putExtra(CaptureService.EXTRA_XPAD_ROLL, xpadRoll);
-        service.putExtra(CaptureService.EXTRA_XPAD_HOLD, xpadHold);
-        service.putExtra(CaptureService.EXTRA_XPAD_TOUCH, false);
-        service.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
         try {
             startForegroundService(service);
             captureStarted = true;
