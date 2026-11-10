@@ -5,6 +5,11 @@ import android.content.*;
 import android.media.projection.MediaProjectionManager;
 import android.os.*;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.widget.*;
 import android.graphics.Color;
 import java.util.Locale;
@@ -15,7 +20,7 @@ public final class MainActivity extends Activity {
     private TextView status,bpm,clock,confidence,beat;
     private float offset=0f;
     private TextView sendLabel;
-    private SeekBar sendControl;
+    private RotarySend sendControl;
     private boolean receiverRegistered=false;
     private final BroadcastReceiver receiver=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
@@ -45,27 +50,61 @@ public final class MainActivity extends Activity {
         LinearLayout transport=new LinearLayout(this);transport.setGravity(Gravity.CENTER);root.addView(transport,new LinearLayout.LayoutParams(-1,dp(56)));
         addButton(transport,"START CAPTURE",()->requestCapture());addButton(transport,"STOP",()->{setSendUi(0);command(CaptureService.STOP);});
         sendLabel=text("ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE",13,0xFFFFC928);root.addView(sendLabel);
-        sendControl=new SeekBar(this);sendControl.setMax(100);sendControl.setProgress(0);sendControl.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFFFC928));sendControl.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFC928));
-        root.addView(sendControl,new LinearLayout.LayoutParams(-1,dp(42)));
-        sendControl.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
-            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
-                sendLabel.setText(value==0?"ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE":String.format(Locale.US,"ECHO SEND  %d%%",value));
-                if(fromUser)sendSend(value);
-            }
-            @Override public void onStartTrackingTouch(SeekBar bar){}
-            @Override public void onStopTrackingTouch(SeekBar bar){}
+        sendControl=new RotarySend(this,value->{
+            sendLabel.setText(value==0?"ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE":String.format(Locale.US,"ECHO SEND  %d%%",value));
+            sendSend(value);
         });
+        LinearLayout sendRow=new LinearLayout(this);sendRow.setGravity(Gravity.CENTER);sendRow.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(sendRow,new LinearLayout.LayoutParams(-1,dp(112)));
+        sendRow.addView(sendControl,new LinearLayout.LayoutParams(dp(104),dp(104)));
         TextView foot=text("CORREZIONE MANUALE",12,0xFFB9BEC7);root.addView(foot);
         TextView range=text("−10 BPM                      0                      +10 BPM",13,0xFFFFC928);root.addView(range);
         setContentView(root);
     }
     private void setSendUi(int value){
-        if(sendControl!=null)sendControl.setProgress(value);
+        if(sendControl!=null)sendControl.setValue(value);
         if(value==0&&sendLabel!=null)sendLabel.setText("ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE");
     }
     private void sendSend(int value){
         Intent i=new Intent(this,CaptureService.class).setAction(CaptureService.FX).putExtra(CaptureService.EXTRA_FX_SEND,value/100f);
         startService(i);
+    }
+    private final class RotarySend extends View {
+        interface Listener { void changed(int value); }
+        private final Paint paint=new Paint(3);
+        private final RectF arc=new RectF();
+        private final Listener listener;
+        private int value=0;
+        private float downY,lastY;
+        RotarySend(Context context,Listener listener){super(context);this.listener=listener;setLayerType(View.LAYER_TYPE_SOFTWARE,null);}
+        void setValue(int v){value=Math.max(0,Math.min(100,v));invalidate();}
+        @Override protected void onDraw(Canvas canvas){
+            super.onDraw(canvas);
+            float cx=getWidth()/2f,cy=getHeight()/2f,r=Math.min(cx,cy)*0.76f;
+            arc.set(cx-r,cy-r,cx+r,cy+r);
+            paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(7));paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setColor(0xFF454C56);canvas.drawArc(arc,135,270,false,paint);
+            if(value>0){paint.setColor(0xFFFFC928);canvas.drawArc(arc,135,270f*value/100f,false,paint);}
+            paint.setStyle(Paint.Style.FILL);paint.setColor(0xFF252B33);canvas.drawCircle(cx,cy,r*0.72f,paint);
+            double a=Math.toRadians(135+270.0*value/100.0);
+            paint.setColor(0xFFFFC928);canvas.drawCircle(cx+(float)Math.cos(a)*r*0.9f,cy+(float)Math.sin(a)*r*0.9f,dp(4),paint);
+            paint.setColor(Color.WHITE);paint.setTextAlign(Paint.Align.CENTER);paint.setTextSize(dp(17));paint.setTypeface(android.graphics.Typeface.create("sans-serif-medium",0));
+            canvas.drawText(value+"%",cx,cy+dp(6),paint);
+            paint.setColor(0xFFB9BEC7);paint.setTextSize(dp(9));paint.setTypeface(android.graphics.Typeface.DEFAULT);
+            canvas.drawText("SEND",cx,cy+r*0.48f,paint);
+        }
+        @Override public boolean onTouchEvent(MotionEvent event){
+            if(event.getAction()==MotionEvent.ACTION_DOWN){downY=lastY=event.getY();return true;}
+            if(event.getAction()==MotionEvent.ACTION_MOVE){
+                float dy=lastY-event.getY();lastY=event.getY();
+                if(Math.abs(event.getY()-downY)>dp(1)){
+                    value=Math.max(0,Math.min(100,value+Math.round(dy*1.2f)));
+                    invalidate();listener.changed(value);
+                }
+                return true;
+            }
+            return event.getAction()==MotionEvent.ACTION_UP||event.getAction()==MotionEvent.ACTION_CANCEL;
+        }
     }
     private LinearLayout panel(){LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setGravity(Gravity.CENTER);p.setBackgroundColor(0xFF252930);return p;}
     private TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setGravity(Gravity.CENTER);return t;}
