@@ -61,7 +61,7 @@ public final class CaptureService extends Service {
         broadcastStatus("Cattura attiva: riproduci musica");
     }
     private void audioLoop(){
-        Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO);
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO);
         short[] pcm=new short[1024];
         try{
             while(running.get()){
@@ -76,7 +76,7 @@ public final class CaptureService extends Service {
         }catch(Exception ignored){}finally{if(running.get())stopEngine();}
     }
     private void clockLoop(){
-        Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);
         while(running.get()){
             long now=System.nanoTime();
             float bpm=engine.getClockBpm();
