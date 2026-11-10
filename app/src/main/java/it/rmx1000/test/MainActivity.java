@@ -14,8 +14,8 @@ public final class MainActivity extends Activity {
     private MediaProjectionManager projectionManager;
     private TextView status,bpm,clock,confidence,beat;
     private float offset=0f;
-    private boolean fxEnabled=false;
-    private Button fxButton;
+    private TextView sendLabel;
+    private SeekBar sendControl;
     private boolean receiverRegistered=false;
     private final BroadcastReceiver receiver=new BroadcastReceiver(){
         @Override public void onReceive(Context c,Intent i){
@@ -43,27 +43,37 @@ public final class MainActivity extends Activity {
         LinearLayout controls=new LinearLayout(this);controls.setGravity(Gravity.CENTER);root.addView(controls,new LinearLayout.LayoutParams(-1,dp(58)));
         addButton(controls,"− 1 BPM",()->changeOffset(-1));addButton(controls,"SYNC",()->command(CaptureService.SYNC));addButton(controls,"+ 1 BPM",()->changeOffset(1));
         LinearLayout transport=new LinearLayout(this);transport.setGravity(Gravity.CENTER);root.addView(transport,new LinearLayout.LayoutParams(-1,dp(56)));
-        addButton(transport,"START CAPTURE",()->requestCapture());addButton(transport,"STOP",()->{setFxUi(false);command(CaptureService.STOP);});
-        fxButton=addButton(transport,"DELAY OFF",()->{
-            boolean enable=!fxEnabled;
-            Intent fx=new Intent(this,CaptureService.class).setAction(CaptureService.FX).putExtra(CaptureService.EXTRA_FX_ENABLED,enable);
-            startService(fx);
-            setFxUi(enable);
+        addButton(transport,"START CAPTURE",()->requestCapture());addButton(transport,"STOP",()->{setSendUi(0);command(CaptureService.STOP);});
+        sendLabel=text("ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE",13,0xFFFFC928);root.addView(sendLabel);
+        sendControl=new SeekBar(this);sendControl.setMax(100);sendControl.setProgress(0);sendControl.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFFFFC928));sendControl.setThumbTintList(android.content.res.ColorStateList.valueOf(0xFFFFC928));
+        root.addView(sendControl,new LinearLayout.LayoutParams(-1,dp(42)));
+        sendControl.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener(){
+            @Override public void onProgressChanged(SeekBar bar,int value,boolean fromUser){
+                sendLabel.setText(value==0?"ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE":String.format(Locale.US,"ECHO SEND  %d%%",value));
+                if(fromUser)sendSend(value);
+            }
+            @Override public void onStartTrackingTouch(SeekBar bar){}
+            @Override public void onStopTrackingTouch(SeekBar bar){}
         });
         TextView foot=text("CORREZIONE MANUALE",12,0xFFB9BEC7);root.addView(foot);
         TextView range=text("−10 BPM                      0                      +10 BPM",13,0xFFFFC928);root.addView(range);
         setContentView(root);
     }
-    private void setFxUi(boolean enabled){
-        fxEnabled=enabled;
-        if(fxButton!=null){fxButton.setText(enabled?"ECHO ON":"ECHO OFF");fxButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(enabled?0xFF247B4B:0xFF444B55));}
+    private void setSendUi(int value){
+        if(sendControl!=null)sendControl.setProgress(value);
+        if(value==0&&sendLabel!=null)sendLabel.setText("ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE");
+        sendSend(value);
+    }
+    private void sendSend(int value){
+        Intent i=new Intent(this,CaptureService.class).setAction(CaptureService.FX).putExtra(CaptureService.EXTRA_FX_SEND,value/100f);
+        startService(i);
     }
     private LinearLayout panel(){LinearLayout p=new LinearLayout(this);p.setOrientation(LinearLayout.VERTICAL);p.setGravity(Gravity.CENTER);p.setBackgroundColor(0xFF252930);return p;}
     private TextView text(String s,int size,int color){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);t.setGravity(Gravity.CENTER);return t;}
     private Button addButton(LinearLayout row,String label,Runnable action){Button b=new Button(this);b.setText(label);b.setTextColor(Color.WHITE);b.setTextSize(13);b.setAllCaps(false);b.setBackgroundTintList(android.content.res.ColorStateList.valueOf(label.equals("SYNC")?0xFF247B4B:0xFF444B55));b.setOnClickListener(v->action.run());LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,dp(48),1);p.setMargins(dp(4),0,dp(4),0);row.addView(b,p);return b;}
     private void changeOffset(float d){offset=Math.max(-10,Math.min(10,offset+d));Intent i=new Intent(this,CaptureService.class).setAction(CaptureService.OFFSET).putExtra(CaptureService.EXTRA_OFFSET,offset);startService(i);status.setText(String.format(Locale.US,"Correzione clock: %+.1f BPM",offset));}
     private void command(String action){startService(new Intent(this,CaptureService.class).setAction(action));}
-    private void requestCapture(){setFxUi(false);startActivityForResult(projectionManager.createScreenCaptureIntent(),REQUEST_CAPTURE);}
+    private void requestCapture(){setSendUi(0);startActivityForResult(projectionManager.createScreenCaptureIntent(),REQUEST_CAPTURE);}
     @Override protected void onActivityResult(int r,int code,Intent data){super.onActivityResult(r,code,data);if(r!=REQUEST_CAPTURE)return;if(code!=RESULT_OK||data==null){status.setText("Cattura non autorizzata");return;}Intent s=new Intent(this,CaptureService.class).setAction(CaptureService.START).putExtra(CaptureService.EXTRA_CODE,code).putExtra(CaptureService.EXTRA_DATA,data);startForegroundService(s);}
     @Override protected void onStart(){super.onStart();IntentFilter f=new IntentFilter();f.addAction(CaptureService.BPM);f.addAction(CaptureService.BEAT);f.addAction(CaptureService.STATUS);if(Build.VERSION.SDK_INT>=33)registerReceiver(receiver,f,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(receiver,f);receiverRegistered=true;}
     @Override protected void onStop(){if(receiverRegistered){unregisterReceiver(receiver);receiverRegistered=false;}super.onStop();}
