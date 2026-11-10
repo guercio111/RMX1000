@@ -126,12 +126,12 @@ public class MainActivity extends Activity {
         faderLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         tempoFaderRow.addView(faderLabel, new LinearLayout.LayoutParams(dp(52), dp(30)));
         clockFader = new SeekBar(this);
-        clockFader.setMax(100);
-        clockFader.setProgress(50);
+        clockFader.setMax(200);
+        clockFader.setProgress(100);
         clockFader.setSplitTrack(false);
         clockFader.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser && !clockUiUpdating) setClockTrim((progress - 50) * 0.1f);
+                if (fromUser && !clockUiUpdating) setClockTrim((progress - 100) * 0.1f);
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { }
             @Override public void onStopTrackingTouch(SeekBar seekBar) { }
@@ -460,7 +460,7 @@ public class MainActivity extends Activity {
     }
 
     private void setClockTrim(float trimBpm) {
-        clockTrimBpm = Math.max(-5f, Math.min(5f, trimBpm));
+        clockTrimBpm = Math.max(-10f, Math.min(10f, trimBpm));
         updateClockFader();
         if (!captureStarted) return;
         Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
@@ -502,7 +502,7 @@ public class MainActivity extends Activity {
     private void updateClockFader() {
         if (clockFader == null) return;
         clockUiUpdating = true;
-        clockFader.setProgress(Math.max(0, Math.min(100, Math.round(50f + clockTrimBpm * 10f))));
+        clockFader.setProgress(Math.max(0, Math.min(100, Math.round(100f + clockTrimBpm * 10f))));
         clockUiUpdating = false;
     }
 
