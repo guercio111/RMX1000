@@ -27,7 +27,7 @@ public final class MainActivity extends Activity {
                 confidence.setText(String.format(Locale.US,"AFFIDABILITÀ  %d%%   •   %s",(int)(conf*100),locked?"LOCK":"RICERCA"));
             }else if(CaptureService.STATUS.equals(i.getAction())){
                 String message=i.getStringExtra("message");status.setText(message);
-                if(message!=null&&(message.contains("arrestata")||message.contains("fallito"))){setFxUi(false);}
+                if(message!=null&&(message.contains("arrestata")||message.contains("fallito"))){setSendUi(0);}
             }else if(CaptureService.BEAT.equals(i.getAction())){beat.setText("●");beat.setTextColor(0xFF39E879);beat.postDelayed(()->beat.setTextColor(0xFF56606B),110);}
         }
     };
@@ -62,7 +62,6 @@ public final class MainActivity extends Activity {
     private void setSendUi(int value){
         if(sendControl!=null)sendControl.setProgress(value);
         if(value==0&&sendLabel!=null)sendLabel.setText("ECHO SEND  0%  ·  SOLO AUDIO ORIGINALE");
-        sendSend(value);
     }
     private void sendSend(int value){
         Intent i=new Intent(this,CaptureService.class).setAction(CaptureService.FX).putExtra(CaptureService.EXTRA_FX_SEND,value/100f);
