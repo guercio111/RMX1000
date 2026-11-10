@@ -24,6 +24,8 @@ public final class BeatEngine {
     private double periodMs;
     private float manualOffset;
     private boolean locked;
+    private float candidateBpm;
+    private int candidateStreak;
 
     public synchronized void reset() {
         ringWrite = ringCount = samplesUntilHop = 0;
@@ -32,6 +34,8 @@ public final class BeatEngine {
         lastAnalysisMs = lastOnsetMs = phaseMs = 0L;
         periodMs = 0.0;
         locked = false;
+        candidateBpm = 0f;
+        candidateStreak = 0;
         for (int i = 0; i < 3; i++) { previousBands[i] = 0f; lowState[i] = 0f; }
     }
 
@@ -99,58 +103,98 @@ public final class BeatEngine {
     }
 
     private void analyse(long nowMs) {
-        // Autocorrelation over onset-strength history. Search 60..200 BPM.
+        // Autocorrelation of onset strength. 60..200 BPM at 5.333 ms/hop.
         int minLag = (int)(60000.0 / 200.0 / (1000.0 * HOP / SAMPLE_RATE));
         int maxLag = (int)(60000.0 / 60.0 / (1000.0 * HOP / SAMPLE_RATE));
         int window = Math.min(ringCount - maxLag - 1, 1100);
         if (window < 500) return;
+
         double mean = 0.0;
         for (int i = 0; i < window; i++) mean += atFromNewest(i);
         mean /= window;
-        double best = -1.0;
-        int bestLag = 0;
-        double[] scores = new double[maxLag + 1];
+
+        double[] scores = new double[maxLag * 3 + 1];
         for (int lag = minLag; lag <= maxLag; lag++) {
             double xy = 0.0, xx = 0.0, yy = 0.0;
             for (int i = 0; i < window; i++) {
-                double a = atFromNewest(i) - mean;
-                double b = atFromNewest(i + lag) - mean;
-                xy += a * b; xx += a * a; yy += b * b;
+                double x = atFromNewest(i) - mean;
+                double y = atFromNewest(i + lag) - mean;
+                xy += x * y;
+                xx += x * x;
+                yy += y * y;
             }
-            double score = xy / Math.sqrt(Math.max(1e-12, xx * yy));
-            scores[lag] = score;
-            if (score > best) { best = score; bestLag = lag; }
+            scores[lag] = xy / Math.sqrt(Math.max(1e-12, xx * yy));
         }
-        if (bestLag == 0 || best < 0.12) {
-            confidence *= 0.92f;
+
+        // Score a beat candidate using its own periodicity plus evidence at
+        // integer multiples. This helps distinguish a real beat from a
+        // half-tempo estimate without blindly doubling every detected value.
+        int chosenLag = 0;
+        double bestComposite = -1.0;
+        for (int lag = minLag; lag <= maxLag; lag++) {
+            double direct = scores[lag];
+            if (direct < 0.10) continue;
+            double composite = direct;
+            if (lag * 2 <= maxLag) composite += 0.80 * Math.max(0.0, scores[lag * 2]);
+            if (lag * 3 <= maxLag) composite += 0.20 * Math.max(0.0, scores[lag * 3]);
+            if (composite > bestComposite) {
+                bestComposite = composite;
+                chosenLag = lag;
+            }
+        }
+
+        if (chosenLag == 0) {
+            confidence *= 0.90f;
             if (confidence < 0.12f) locked = false;
+            candidateStreak = 0;
             return;
         }
-        // Prefer a nearby harmonic only when it has comparable evidence.
-        int chosen = bestLag;
-        int half = bestLag / 2;
-        int twice = bestLag * 2;
-        if (half >= minLag && scores[half] > best * 0.92) chosen = half;
-        else if (twice <= maxLag && scores[twice] > best * 0.94) chosen = twice;
-        float raw = (float)(60000.0 / (chosen * (1000.0 * HOP / SAMPLE_RATE)));
-        raw = Math.max(60f, Math.min(200f, raw));
-        float quality = (float)Math.max(0.0, Math.min(1.0, (best - 0.08) / 0.55));
-        if (detectedBpm == 0f || confidence < 0.15f) detectedBpm = raw;
-        else {
-            float maxStep = 1.5f;
-            float delta = Math.max(-maxStep, Math.min(maxStep, raw - detectedBpm));
-            detectedBpm += delta * (0.12f + quality * 0.18f);
+
+        float rawBpm = (float)(60000.0 / (chosenLag * (1000.0 * HOP / SAMPLE_RATE)));
+        rawBpm = Math.max(60f, Math.min(200f, rawBpm));
+        float directQuality = (float)Math.max(0.0,
+                Math.min(1.0, (scores[chosenLag] - 0.08) / 0.50));
+
+        // Require repeated agreement before changing the displayed tempo.
+        // The 250 ms analysis cadence makes three confirmations ~750 ms.
+        if (candidateBpm == 0f || Math.abs(rawBpm - candidateBpm) > Math.max(2.0f, candidateBpm * 0.025f)) {
+            candidateBpm = rawBpm;
+            candidateStreak = 1;
+        } else {
+            candidateBpm += (rawBpm - candidateBpm) * 0.20f;
+            candidateStreak = Math.min(8, candidateStreak + 1);
         }
-        confidence = confidence * 0.75f + quality * 0.25f;
+
+        if (candidateStreak < 3) {
+            confidence *= 0.96f;
+            return;
+        }
+
+        if (detectedBpm == 0f || confidence < 0.10f) {
+            detectedBpm = candidateBpm;
+        } else {
+            // A bounded, slow correction prevents momentary onset changes
+            // from making the BPM display hunt up and down.
+            float delta = candidateBpm - detectedBpm;
+            float maxStep = 0.60f;
+            detectedBpm += Math.max(-maxStep, Math.min(maxStep, delta)) * 0.20f;
+        }
+
+        float stability = Math.min(1.0f, candidateStreak / 5.0f);
+        float quality = directQuality * stability;
+        confidence = confidence * 0.78f + quality * 0.22f;
+
         double newPeriod = 60000.0 / getClockBpm();
         if (periodMs <= 0.0) {
             periodMs = newPeriod;
             phaseMs = nowMs;
             locked = confidence > 0.25f;
         } else {
-            // Smooth tempo changes without allowing the phase to jump with every estimate.
-            periodMs += (newPeriod - periodMs) * 0.04;
-            if (!locked && confidence > 0.35f) { phaseMs = nowMs; locked = true; }
+            periodMs += (newPeriod - periodMs) * 0.025;
+            if (!locked && confidence > 0.35f) {
+                phaseMs = nowMs;
+                locked = true;
+            }
         }
     }
 
