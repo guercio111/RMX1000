@@ -64,6 +64,8 @@ public final class DspProcessor {
     // Adaptive beat tracker driven by low-band transients (kick/bass attacks).
     private long beatSamples = 24000L; // 120 BPM fallback at 48 kHz
     private long rhythmPhase;
+    // Dedicated beat detector input: always sourced before FX/X-PAD processing.
+    private float beatLowL, beatLowR;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
     // A short history rejects isolated false tempo estimates without allocating in the audio thread.
@@ -149,6 +151,7 @@ public final class DspProcessor {
     public void resetRhythm() {
         frameCounter = 0L;
         rhythmPhase = 0L;
+        beatLowL = beatLowR = 0f;
         beatSamples = 24000L;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
@@ -198,6 +201,11 @@ public final class DspProcessor {
             float left = pcm[i] / 32768.0f;
             float right = pcm[i + 1] / 32768.0f;
             float outL = left, outR = right;
+
+            // Track musical bass attacks from the untouched source, not the processed FX return.
+            beatLowL += (left - beatLowL) * LOW_ALPHA;
+            beatLowR += (right - beatLowR) * LOW_ALPHA;
+            updateBeatTracker(beatLowL, beatLowR);
 
             xpadHistory[xpadHistoryPosition] = left;
             xpadHistory[xpadHistoryPosition + 1] = right;
@@ -408,8 +416,6 @@ public final class DspProcessor {
             float b0L = lowL, b0R = lowR;
             float b1L = lowMidL - lowL, b1R = lowMidR - lowR;
             float b2L = outL - lowMidL, b2R = outR - lowMidR;
-
-            updateBeatTracker(b0L, b0R);
 
             float finalL = processBand(0, b0L, lowGain) +
                            processBand(1, b1L, midGain) +
