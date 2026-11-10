@@ -52,6 +52,8 @@ public final class DspProcessor {
     private static final float LOW_ALPHA = 0.0323f;
     private static final float HIGH_ALPHA = 0.279f;
     private float lowL, lowR, lowMidL, lowMidR;
+    // Independent dry low-pass feed for beat detection; FX never enters this path.
+    private float clockLowL, clockLowR;
     private volatile float lowTargetGain = 1f, midTargetGain = 1f, highTargetGain = 1f;
     private float lowGain = 1f, midGain = 1f, highGain = 1f;
 
@@ -66,6 +68,11 @@ public final class DspProcessor {
     private long rhythmPhase;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
+    // Same five-hit median estimator used by the earlier stable 0.6.3 build.
+    private final long[] tempoCandidates = new long[5];
+    private final long[] tempoScratch = new long[5];
+    private int tempoCandidateCount;
+    private int tempoCandidatePosition;
     private final float[] envelopesL = new float[3];
     private final float[] envelopesR = new float[3];
 
@@ -111,6 +118,11 @@ public final class DspProcessor {
         beatSamples = 24000L;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
+        clockLowL = clockLowR = 0f;
+        tempoCandidateCount = 0;
+        tempoCandidatePosition = 0;
+        java.util.Arrays.fill(tempoCandidates, 24000L);
+        java.util.Arrays.fill(tempoScratch, 24000L);
         repeatPosition = 0;
 
         for (int band = 0; band < 3; band++) {
@@ -147,6 +159,11 @@ public final class DspProcessor {
             float left = pcm[i] / 32768.0f;
             float right = pcm[i + 1] / 32768.0f;
             float outL = left, outR = right;
+
+            // Track the original signal before Scene FX, echo feedback or X-PAD mixing.
+            clockLowL += (left - clockLowL) * LOW_ALPHA;
+            clockLowR += (right - clockLowR) * LOW_ALPHA;
+            updateBeatTracker(clockLowL, clockLowR);
 
 
             if (enabled && mode >= 0) {
@@ -339,7 +356,6 @@ public final class DspProcessor {
             float b1L = lowMidL - lowL, b1R = lowMidR - lowR;
             float b2L = outL - lowMidL, b2R = outR - lowMidR;
 
-            updateBeatTracker(b0L, b0R);
 
             float finalL = processBand(0, b0L, lowGain) +
                            processBand(1, b1L, midGain) +
@@ -368,7 +384,7 @@ public final class DspProcessor {
         bassSlow += (bass - bassSlow) * 0.00022f;
 
         if (bassFast < 0.018f || bassFast < bassSlow * 1.65f) return;
-        if (lastOnsetFrame >= 0L && frameCounter - lastOnsetFrame < 8640L) return; // 180 ms guard
+        if (lastOnsetFrame >= 0L && frameCounter - lastOnsetFrame < 8640L) return;
 
         if (lastOnsetFrame >= 0L) {
             long interval = frameCounter - lastOnsetFrame;
@@ -386,7 +402,23 @@ public final class DspProcessor {
                         }
                     }
                 }
-                beatSamples += (long) ((best - beatSamples) * 0.12f);
+
+                tempoCandidates[tempoCandidatePosition] = best;
+                tempoCandidatePosition = (tempoCandidatePosition + 1) % tempoCandidates.length;
+                if (tempoCandidateCount < tempoCandidates.length) tempoCandidateCount++;
+
+                for (int i = 0; i < tempoCandidateCount; i++) tempoScratch[i] = tempoCandidates[i];
+                for (int i = 1; i < tempoCandidateCount; i++) {
+                    long value = tempoScratch[i];
+                    int j = i - 1;
+                    while (j >= 0 && tempoScratch[j] > value) {
+                        tempoScratch[j + 1] = tempoScratch[j];
+                        j--;
+                    }
+                    tempoScratch[j + 1] = value;
+                }
+                long median = tempoScratch[tempoCandidateCount / 2];
+                beatSamples += (long) ((median - beatSamples) * 0.08f);
             }
         }
         lastOnsetFrame = frameCounter;
