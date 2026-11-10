@@ -203,6 +203,9 @@ public final class DspProcessor {
         xpadWasTouchDown = xpadActive = false; xpadActiveDivision = -1;
         java.util.Arrays.fill(xpadHistory, 0f);
         java.util.Arrays.fill(xpadLoop, 0f);
+        java.util.Arrays.fill(echo, 0f);
+        java.util.Arrays.fill(spiralBuffer, 0f);
+        echoPosition = spiralPosition = 0;
 
         for (int band = 0; band < 3; band++) {
             java.util.Arrays.fill(repeatL[band], 0f);
@@ -239,6 +242,7 @@ public final class DspProcessor {
             float right = pcm[i + 1] / 32768.0f;
             float outL = left, outR = right;
             boolean echoBufferWritten = false;
+            boolean spiralBufferWritten = false;
 
             xpadHistory[xpadHistoryPosition] = left;
             xpadHistory[xpadHistoryPosition + 1] = right;
@@ -317,6 +321,7 @@ public final class DspProcessor {
                         // Hann crossfades hide grain resets without changing the beat clock.
                         spiralBuffer[spiralPosition] = left;
                         spiralBuffer[spiralPosition + 1] = right;
+                        spiralBufferWritten = true;
                         float baseDelay = beatSamples * (0.125f + fxLevel * 0.875f);
                         float amount = fxSub2;
                         float phaseA = (frameCounter % SPIRAL_GRAIN) / (float)SPIRAL_GRAIN;
@@ -337,8 +342,6 @@ public final class DspProcessor {
                                 + readSpiral(spiralBuffer, readB) * weightB;
                         inputR = readSpiral(spiralBuffer, readA + 1f) * weightA
                                 + readSpiral(spiralBuffer, readB + 1f) * weightB;
-                        spiralPosition += 2;
-                        if (spiralPosition >= spiralBuffer.length) spiralPosition = 0;
                     }
 
                     if (mode == MODE_NOISE) {
@@ -436,6 +439,14 @@ public final class DspProcessor {
             }
             echoPosition += 2;
             if (echoPosition >= echo.length) echoPosition = 0;
+
+            // Keep the SPIRAL read history aligned to the same continuous sample clock.
+            if (!spiralBufferWritten) {
+                spiralBuffer[spiralPosition] = left;
+                spiralBuffer[spiralPosition + 1] = right;
+            }
+            spiralPosition += 2;
+            if (spiralPosition >= spiralBuffer.length) spiralPosition = 0;
 
             if (xpadRoll && xpadActive && xpadLoopFrames > 0) {
                 int xp = xpadLoopPosition * 2;
