@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
     private TextView tempoView;
     private Button clockLockButton;
     private SeekBar clockFader;
-    private Button clockAutoResetButton, clockFaderResetButton;
+    private Button clockSyncButton, clockAutoResetButton, clockFaderResetButton;
     private boolean clockUiUpdating = false;
     private boolean clockLocked = false;
     private float clockTrimBpm = 0f;
@@ -142,11 +142,15 @@ public class MainActivity extends Activity {
         LinearLayout clockResetRow = new LinearLayout(this);
         clockResetRow.setOrientation(LinearLayout.HORIZONTAL);
         clockResetRow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(0, dp(30), 1f);
+        resetParams.setMargins(dp(3), 0, dp(3), 0);
+        clockSyncButton = makeButton("SYNC", Color.rgb(35, 105, 150));
+        clockSyncButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        clockSyncButton.setOnClickListener(v -> syncClockBeat());
+        clockResetRow.addView(clockSyncButton, resetParams);
         clockAutoResetButton = makeButton("AUTO RESET", Color.rgb(70, 73, 80));
         clockAutoResetButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
         clockAutoResetButton.setOnClickListener(v -> resetClockAuto());
-        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(dp(116), dp(30));
-        resetParams.setMargins(dp(4), 0, dp(4), 0);
         clockResetRow.addView(clockAutoResetButton, resetParams);
         clockFaderResetButton = makeButton("FADER RESET", Color.rgb(70, 73, 80));
         clockFaderResetButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
@@ -461,6 +465,17 @@ public class MainActivity extends Activity {
         if (!captureStarted) return;
         Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
         i.putExtra(CaptureService.EXTRA_CLOCK_TRIM_BPM, clockTrimBpm);
+        startService(i);
+    }
+
+    private void syncClockBeat() {
+        clockLocked = false;
+        clockTrimBpm = 0f;
+        updateClockLockButton();
+        updateClockFader();
+        if (!captureStarted) return;
+        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
+        i.putExtra(CaptureService.EXTRA_CLOCK_SYNC, true);
         startService(i);
     }
 
