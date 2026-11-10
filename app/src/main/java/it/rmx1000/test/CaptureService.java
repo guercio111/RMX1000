@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class CaptureService extends Service {
     public static final String START="clock.START", STOP="clock.STOP", SYNC="clock.SYNC", OFFSET="clock.OFFSET", FX="clock.FX";
     public static final String BPM="clock.BPM", BEAT="clock.BEAT", STATUS="clock.STATUS";
-    public static final String EXTRA_CODE="code", EXTRA_DATA="data", EXTRA_OFFSET="offset", EXTRA_FX_ENABLED="fx_enabled";
+    public static final String EXTRA_CODE="code", EXTRA_DATA="data", EXTRA_OFFSET="offset", EXTRA_FX_SEND="fx_send";
     private static final String CHANNEL="bpm_clock_capture";
     private final AtomicBoolean running=new AtomicBoolean(false);
     private final BeatEngine engine=new BeatEngine();
@@ -22,7 +22,7 @@ public final class CaptureService extends Service {
     private volatile long nextBeatNs;
     private volatile long beatPeriodNs;
     private volatile float offset;
-    private volatile boolean fxEnabled=false;
+    private volatile float fxSend=0f;
     private boolean previousFxEnabled=false;
     private short[] delayBuffer;
     private int delayWriteFrame=0;
@@ -33,12 +33,12 @@ public final class CaptureService extends Service {
     @Override public int onStartCommand(Intent i,int flags,int id){
         if(i==null)return START_NOT_STICKY;
         String a=i.getAction();
-        if(STOP.equals(a)){fxEnabled=false;stopEngine();stopSelf();return START_NOT_STICKY;}
+        if(STOP.equals(a)){fxSend=0f;stopEngine();stopSelf();return START_NOT_STICKY;}
         if(SYNC.equals(a)){syncRequested=true;return START_NOT_STICKY;}
         if(FX.equals(a)){
-            fxEnabled=running.get() && i.getBooleanExtra(EXTRA_FX_ENABLED,false);
-            if(!fxEnabled && delayBuffer!=null){java.util.Arrays.fill(delayBuffer,(short)0);delayWriteFrame=0;}
-            broadcastStatus(fxEnabled?"Eco classico attivo (1/4)":"Effetto completamente escluso");
+            fxSend=running.get()?Math.max(0f,Math.min(1f,i.getFloatExtra(EXTRA_FX_SEND,0f))):0f;
+            if(fxSend<=0f && delayBuffer!=null){java.util.Arrays.fill(delayBuffer,(short)0);delayWriteFrame=0;previousFxEnabled=false;}
+            broadcastStatus(fxSend<=0f?"Mandata a zero: solo audio originale":String.format(java.util.Locale.US,"Mandata eco %.0f%%",fxSend*100f));
             return START_NOT_STICKY;
         }
         if(OFFSET.equals(a)){offset=Math.max(-10f,Math.min(10f,i.getFloatExtra(EXTRA_OFFSET,0f)));engine.setManualOffset(offset);return START_NOT_STICKY;}
@@ -67,7 +67,7 @@ public final class CaptureService extends Service {
         player=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()).setAudioFormat(outf).setBufferSizeInBytes(Math.max(outMin*2,8192)).setTransferMode(AudioTrack.MODE_STREAM).build();
         if(player.getState()!=AudioTrack.STATE_INITIALIZED)throw new IllegalStateException("AudioTrack non inizializzato");
         engine.reset();engine.setManualOffset(offset);
-        delayBuffer=new short[BeatEngine.SAMPLE_RATE*2*2];delayWriteFrame=0;previousFxEnabled=false;fxEnabled=false;
+        delayBuffer=new short[BeatEngine.SAMPLE_RATE*2*2];delayWriteFrame=0;previousFxEnabled=false;fxSend=0f;
         running.set(true);recorder.startRecording();player.play();
         audioThread=new Thread(this::audioLoop,"BPM-Audio");audioThread.start();
         clockThread=new Thread(this::clockLoop,"BPM-Master-Clock");clockThread.start();
@@ -96,10 +96,11 @@ public final class CaptureService extends Service {
      */
     private void applyDelay(short[] pcm,int samples){
         if(delayBuffer==null)return;
-        if(!fxEnabled){
+        float send=fxSend;
+        if(send<=0f){
             if(previousFxEnabled){java.util.Arrays.fill(delayBuffer,(short)0);delayWriteFrame=0;}
             previousFxEnabled=false;
-            return; // bit-perfect captured PCM is sent onward; no wet tail survives
+            return; // true dry bypass: captured PCM is not modified
         }
         if(!previousFxEnabled){java.util.Arrays.fill(delayBuffer,(short)0);delayWriteFrame=0;}
         previousFxEnabled=true;
@@ -117,8 +118,8 @@ public final class CaptureService extends Service {
             short echoL=delayBuffer[ri],echoR=delayBuffer[ri+1];
             // Store dry input only: exactly one echo, no accumulating repetitions.
             delayBuffer[wi]=dryL;delayBuffer[wi+1]=dryR;
-            pcm[f*2]=(short)clamp16(dryL+echoL*0.24f);
-            pcm[f*2+1]=(short)clamp16(dryR+echoR*0.24f);
+            pcm[f*2]=(short)clamp16(dryL+echoL*(send*0.45f));
+            pcm[f*2+1]=(short)clamp16(dryR+echoR*(send*0.45f));
             delayWriteFrame++;if(delayWriteFrame>=capacity)delayWriteFrame=0;
         }
     }
@@ -146,7 +147,7 @@ public final class CaptureService extends Service {
     }
     private void broadcastStatus(String s){sendBroadcast(new Intent(STATUS).setPackage(getPackageName()).putExtra("message",s));}
     private synchronized void stopEngine(){
-        fxEnabled=false;
+        fxSend=0f;
         if(!running.getAndSet(false)){release();return;}
         if(recorder!=null){try{recorder.stop();}catch(Exception ignored){}}
         if(player!=null){try{player.pause();player.flush();player.stop();}catch(Exception ignored){}}
