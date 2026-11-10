@@ -64,6 +64,8 @@ public final class DspProcessor {
     // Adaptive beat tracker driven by low-band transients (kick/bass attacks).
     private volatile long beatSamples = 24000L; // 120 BPM fallback at 48 kHz
     private volatile boolean tempoLocked = false;
+    private volatile long lockBaseBeatSamples = 24000L;
+    private volatile float tempoTrimBpm = 0f;
     private long rhythmPhase;
     private long lastOnsetFrame = -1L;
     private float bassFast, bassSlow;
@@ -94,17 +96,9 @@ public final class DspProcessor {
 
     public void setMode(int value) {
         if (value < -1 || value > MODE_REVERB_DOWN || mode == value) return;
-        int previous = mode;
         mode = value;
-        // Do not carry a previous Scene FX tail into a different algorithm.
-        // This avoids stacking unrelated delay states when the user changes FX.
-        java.util.Arrays.fill(echo, 0f);
-        echoPosition = 0;
-        if (previous == MODE_SPIRAL_UP || previous == MODE_SPIRAL_DOWN ||
-                value == MODE_SPIRAL_UP || value == MODE_SPIRAL_DOWN) {
-            java.util.Arrays.fill(spiralBuffer, 0f);
-            spiralPosition = 0;
-        }
+        // Preserve shared delay history and write-head position across effect changes.
+        // The clock and all beat-synced effects therefore remain on one sample timeline.
         sceneLpL = sceneLpR = sceneHpL = sceneHpR = 0f;
         crushHoldL = crushHoldR = 0f;
         crushCounter = 0;
@@ -147,14 +141,45 @@ public final class DspProcessor {
     }
 
     public boolean isTempoLocked() { return tempoLocked; }
+    public float getTempoTrimBpm() { return tempoTrimBpm; }
 
-    public void setTempoLocked(boolean locked) { tempoLocked = locked; }
+    public void setTempoLocked(boolean locked) {
+        if (locked && !tempoLocked) {
+            lockBaseBeatSamples = beatSamples;
+            tempoTrimBpm = 0f;
+        }
+        tempoLocked = locked;
+    }
 
-    /** Fine manual correction: each UI arrow press changes the tempo by 0.1 BPM. */
-    public void adjustTempo(float deltaBpm) {
-        float bpm = getEstimatedBpm() + deltaBpm;
-        bpm = Math.max(60f, Math.min(180f, bpm));
+    public void setTempoTrim(float trimBpm) {
+        if (!tempoLocked) setTempoLocked(true);
+        tempoTrimBpm = Math.max(-5f, Math.min(5f, trimBpm));
+        float baseBpm = 2880000f / Math.max(1L, lockBaseBeatSamples);
+        float bpm = Math.max(60f, Math.min(180f, baseBpm + tempoTrimBpm));
         beatSamples = Math.round(2880000f / bpm);
+    }
+
+    public void resetTempoFader() {
+        tempoTrimBpm = 0f;
+        if (tempoLocked) beatSamples = lockBaseBeatSamples;
+        else lockBaseBeatSamples = beatSamples;
+    }
+
+    public void resetTempoToAuto() {
+        tempoLocked = false;
+        tempoTrimBpm = 0f;
+        lockBaseBeatSamples = beatSamples;
+        lastOnsetFrame = -1L;
+        tempoCandidateCount = 0;
+        tempoCandidatePosition = 0;
+        challengerBeatSamples = 0L;
+        challengerCount = 0;
+        java.util.Arrays.fill(tempoCandidates, beatSamples);
+        java.util.Arrays.fill(tempoScratch, beatSamples);
+    }
+
+    public void adjustTempo(float deltaBpm) {
+        setTempoTrim(tempoTrimBpm + deltaBpm);
     }
 
     /** Reset rhythmic phase and repeat memory at the beginning of a new capture. */
@@ -163,6 +188,8 @@ public final class DspProcessor {
         rhythmPhase = 0L;
         beatSamples = 24000L;
         tempoLocked = false;
+        tempoTrimBpm = 0f;
+        lockBaseBeatSamples = 24000L;
         lastOnsetFrame = -1L;
         bassFast = bassSlow = 0f;
         tempoCandidateCount = 0;
@@ -211,6 +238,7 @@ public final class DspProcessor {
             float left = pcm[i] / 32768.0f;
             float right = pcm[i + 1] / 32768.0f;
             float outL = left, outR = right;
+            boolean echoBufferWritten = false;
 
             xpadHistory[xpadHistoryPosition] = left;
             xpadHistory[xpadHistoryPosition + 1] = right;
@@ -374,6 +402,7 @@ public final class DspProcessor {
                     else if (mode == MODE_NOISE) feedback = 0.30f;
                     echo[echoPosition] = clamp(inputL + delayedL * feedback);
                     echo[echoPosition + 1] = clamp(inputR + delayedR * feedback);
+                    echoBufferWritten = true;
 
                     if (mode == MODE_ECHO) {
                         // SCENE FX = dry/wet balance; SUB 2 = high-pass cutoff of repeats.
@@ -397,9 +426,16 @@ public final class DspProcessor {
                         outL = softClip(outL * (1.0f + fxLevel * 0.25f));
                         outR = softClip(outR * (1.0f + fxLevel * 0.25f));
                     }
-                    echoPosition += 2; if (echoPosition >= echo.length) echoPosition = 0;
                 }
             }
+
+            // Advance the delay ring continuously, including FX-off and reverb states.
+            if (!echoBufferWritten) {
+                echo[echoPosition] = left;
+                echo[echoPosition + 1] = right;
+            }
+            echoPosition += 2;
+            if (echoPosition >= echo.length) echoPosition = 0;
 
             if (xpadRoll && xpadActive && xpadLoopFrames > 0) {
                 int xp = xpadLoopPosition * 2;
