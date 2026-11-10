@@ -86,12 +86,10 @@ public final class DspProcessor {
     private volatile boolean xpadActive;
     private int xpadActiveDivision = -1;
     // X-PAD sample bank: 0 KICK, 1 SNARE, 2 CLAP, 3 HI HAT.
-    private volatile int xpadBank = -1; // -1 = BANK OFF
+    private volatile int xpadBank = 0;
     private int xpadSampleAge = -1;
     private long xpadNextTriggerFrame;
     private float xpadKickPhase;
-    private float xpadNoiseLow, xpadNoisePrev;
-    private float xpadHatPhase1, xpadHatPhase2, xpadHatPhase3, xpadHatPhase4;
 
 
     public DspProcessor() {
@@ -130,71 +128,49 @@ public final class DspProcessor {
         xpadDivisionIndex = Math.max(0, Math.min(4, divisionIndex));
         xpadTouchDown = down;
     }
-    public void setXpadBank(int bank) {
-        xpadBank = (bank < 0 || bank > 3) ? -1 : bank;
-        if (xpadBank < 0) xpadSampleAge = -1;
-    }
+    public void setXpadBank(int bank) { xpadBank = Math.max(0, Math.min(3, bank)); }
     private void triggerXpadSample() {
-        if (xpadBank < 0) return;
         xpadSampleAge = 0;
         xpadKickPhase = 0f;
-        xpadNoiseLow = xpadNoisePrev = 0f;
-        xpadHatPhase1 = xpadHatPhase2 = xpadHatPhase3 = xpadHatPhase4 = 0f;
-    }
-    private float nextPadNoise() {
-        noiseState = noiseState * 1664525 + 1013904223;
-        return ((noiseState >>> 8) / 8388608f) - 1f;
     }
     private float renderXpadSample() {
-        if (xpadSampleAge < 0 || xpadBank < 0) return 0f;
+        if (xpadSampleAge < 0) return 0f;
         int age = xpadSampleAge++;
         float t = age / 48000f;
         float value = 0f;
-        if (xpadBank == 0) { // KICK: low, punchy pitch drop with a short beater click.
-            if (age < 10500) {
-                float frequency = 48f + 145f * (float)Math.exp(-t * 42f);
+        if (xpadBank == 0) { // KICK: short falling-pitch sine with a firm transient.
+            if (age < 11500) {
+                float frequency = 42f + 125f * (float)Math.exp(-t * 34f);
                 xpadKickPhase += (float)(2.0 * Math.PI) * frequency / 48000f;
-                float body = (float)Math.sin(xpadKickPhase) * (float)Math.exp(-t * 12.5f);
-                float click = age < 300 ? nextPadNoise() * (1f - age / 300f) * 0.11f : 0f;
-                value = body * 0.40f + click;
+                float env = (float)Math.exp(-t * 10.5f);
+                float click = age < 420 ? (1f - age / 420f) * 0.20f : 0f;
+                value = ((float)Math.sin(xpadKickPhase) * env * 0.82f) + click;
             }
-        } else if (xpadBank == 1) { // SNARE: crisp mid-band noise and a pitched shell.
-            if (age < 8500) {
-                float noise = nextPadNoise();
-                xpadNoiseLow += (noise - xpadNoiseLow) * 0.34f;
-                float bandNoise = noise - xpadNoiseLow;
-                float env = (float)Math.exp(-t * 20f);
-                float shell = (float)Math.sin(2.0 * Math.PI * (190f - 45f * t) * t) * (float)Math.exp(-t * 24f);
-                value = bandNoise * env * 0.29f + shell * 0.16f;
+        } else if (xpadBank == 1) { // SNARE: filtered noise plus a light tonal body.
+            if (age < 9000) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float env = (float)Math.exp(-t * 17f);
+                value = noise * env * 0.48f + (float)Math.sin(2.0 * Math.PI * 185f * t) * env * 0.16f;
             }
-        } else if (xpadBank == 2) { // CLAP: distinct clustered handclap transients.
-            if (age < 9500) {
-                float noise = nextPadNoise();
-                float high = noise - xpadNoisePrev * 0.82f;
-                xpadNoisePrev = noise;
-                float burst = (float)Math.exp(-Math.abs(t - 0.004f) * 520f)
-                        + 0.82f * (float)Math.exp(-Math.abs(t - 0.017f) * 390f)
-                        + 0.62f * (float)Math.exp(-Math.abs(t - 0.031f) * 330f)
-                        + 0.34f * (float)Math.exp(-Math.abs(t - 0.047f) * 240f);
-                value = high * burst * (float)Math.exp(-t * 3.8f) * 0.20f;
+        } else if (xpadBank == 2) { // CLAP: three compact noise bursts.
+            if (age < 10500) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float burst = (float)Math.exp(-Math.abs(t - 0.006f) * 420f)
+                        + 0.72f * (float)Math.exp(-Math.abs(t - 0.021f) * 300f)
+                        + 0.48f * (float)Math.exp(-Math.abs(t - 0.037f) * 260f);
+                value = noise * burst * (float)Math.exp(-t * 5f) * 0.30f;
             }
-        } else if (xpadBank == 3) { // HI HAT: metallic inharmonic partials plus high-passed noise.
-            if (age < 4200) {
-                float noise = nextPadNoise();
-                float high = noise - xpadNoiseLow;
-                xpadNoiseLow += (noise - xpadNoiseLow) * 0.18f;
-                xpadHatPhase1 += (float)(2.0 * Math.PI * 6200.0 / 48000.0);
-                xpadHatPhase2 += (float)(2.0 * Math.PI * 7930.0 / 48000.0);
-                xpadHatPhase3 += (float)(2.0 * Math.PI * 10120.0 / 48000.0);
-                xpadHatPhase4 += (float)(2.0 * Math.PI * 12340.0 / 48000.0);
-                float metal = (float)Math.sin(xpadHatPhase1) * 0.28f
-                        + (float)Math.sin(xpadHatPhase2) * 0.24f
-                        + (float)Math.sin(xpadHatPhase3) * 0.18f
-                        + (float)Math.sin(xpadHatPhase4) * 0.14f;
-                value = (metal + high * 0.45f) * (float)Math.exp(-t * 82f) * 0.15f;
+        } else { // HI HAT: bright, short metallic noise.
+            if (age < 3600) {
+                noiseState = noiseState * 1664525 + 1013904223;
+                float noise = ((noiseState >>> 8) / 8388608f) - 1f;
+                float env = (float)Math.exp(-t * 65f);
+                value = noise * env * 0.24f;
             }
         }
-        if (age > 11000) xpadSampleAge = -1;
+        if (age > 12000) xpadSampleAge = -1;
         return value;
     }
     private void captureXpadLoop(int divisionIndex) {
@@ -282,20 +258,13 @@ public final class DspProcessor {
                 captureXpadLoop(xpadDivisionIndex);
             }
             if (xpadWasTouchDown && !xpadTouchDown && !xpadHold) xpadActive = false;
-            long[] beatDivisors = {8L, 4L, 2L, 1L, 1L};
-            long interval = Math.max(1L, beatSamples / beatDivisors[xpadDivisionIndex]);
-            if (xpadDivisionIndex == 4) interval = beatSamples * 2L;
-            if (xpadTouchDown && !xpadWasTouchDown) {
-                // Quantize the first hit to the next subdivision of the adaptive beat phase.
-                long phase = rhythmPhase % interval;
-                long wait = phase == 0L ? 0L : interval - phase;
-                xpadNextTriggerFrame = frameCounter + wait;
-            }
-            if (xpadTouchDown && frameCounter >= xpadNextTriggerFrame) {
+            if (xpadTouchDown && (!xpadWasTouchDown || frameCounter >= xpadNextTriggerFrame)) {
                 triggerXpadSample();
-                xpadNextTriggerFrame += interval;
+                long[] beatDivisors = {8L, 4L, 2L, 1L, 1L};
+                long interval = Math.max(1L, beatSamples / beatDivisors[xpadDivisionIndex]);
+                if (xpadDivisionIndex == 4) interval = beatSamples * 2L;
+                xpadNextTriggerFrame = frameCounter + interval;
             }
-            if (!xpadTouchDown && xpadWasTouchDown && !xpadHold) xpadSampleAge = -1;
             xpadWasTouchDown = xpadTouchDown;
 
 
@@ -485,9 +454,8 @@ public final class DspProcessor {
             }
             // Percussion samples are mixed over the captured music, not substituted for it.
             float padSample = renderXpadSample();
-            // A conservative wet level leaves room for the original track and transients.
             outL = clamp(outL + padSample);
-            outR = clamp(outR + padSample * 0.94f);
+            outR = clamp(outR + padSample * 0.985f);
 
             lowGain += (lowTargetGain - lowGain) * 0.0012f;
             midGain += (midTargetGain - midGain) * 0.0012f;
