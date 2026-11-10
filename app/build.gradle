@@ -8,7 +8,7 @@ android {
         applicationId 'it.rmx1000.test'
         minSdk 29
         targetSdk 35
-        versionCode 27
-        versionName '1.4.6-clock-fader-phase'
+        versionCode 29
+        versionName '1.4.8-tempo-fader-10'
     }
 }
