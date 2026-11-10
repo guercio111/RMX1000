@@ -8,9 +8,9 @@ import android.os.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CaptureService extends Service {
-    public static final String START="clock.START", STOP="clock.STOP", SYNC="clock.SYNC", OFFSET="clock.OFFSET";
+    public static final String START="clock.START", STOP="clock.STOP", SYNC="clock.SYNC", OFFSET="clock.OFFSET", FX="clock.FX";
     public static final String BPM="clock.BPM", BEAT="clock.BEAT", STATUS="clock.STATUS";
-    public static final String EXTRA_CODE="code", EXTRA_DATA="data", EXTRA_OFFSET="offset";
+    public static final String EXTRA_CODE="code", EXTRA_DATA="data", EXTRA_OFFSET="offset", EXTRA_FX_ENABLED="fx_enabled";
     private static final String CHANNEL="bpm_clock_capture";
     private final AtomicBoolean running=new AtomicBoolean(false);
     private final BeatEngine engine=new BeatEngine();
@@ -22,6 +22,11 @@ public final class CaptureService extends Service {
     private volatile long nextBeatNs;
     private volatile long beatPeriodNs;
     private volatile float offset;
+    private volatile boolean fxEnabled=false;
+    private boolean previousFxEnabled=false;
+    private short[] delayBuffer;
+    private int delayWriteFrame=0;
+    private int delayFrames=12000;
     private long lastUiMs;
 
     @Override public void onCreate(){super.onCreate(); NotificationChannel c=new NotificationChannel(CHANNEL,"BPM Clock",NotificationManager.IMPORTANCE_LOW); getSystemService(NotificationManager.class).createNotificationChannel(c);}
@@ -30,6 +35,7 @@ public final class CaptureService extends Service {
         String a=i.getAction();
         if(STOP.equals(a)){stopEngine();stopSelf();return START_NOT_STICKY;}
         if(SYNC.equals(a)){syncRequested=true;return START_NOT_STICKY;}
+        if(FX.equals(a)){fxEnabled=i.getBooleanExtra(EXTRA_FX_ENABLED,false);broadcastStatus(fxEnabled?"Delay leggero attivo (1/4)":"Delay disattivato");return START_NOT_STICKY;}
         if(OFFSET.equals(a)){offset=Math.max(-10f,Math.min(10f,i.getFloatExtra(EXTRA_OFFSET,0f)));engine.setManualOffset(offset);return START_NOT_STICKY;}
         if(START.equals(a)&&!running.get()){
             startForeground(21,new Notification.Builder(this,CHANNEL).setContentTitle("BPM Clock Engine").setContentText("Analisi audio in corso").setSmallIcon(android.R.drawable.ic_media_play).build());
@@ -55,7 +61,7 @@ public final class CaptureService extends Service {
         int outMin=AudioTrack.getMinBufferSize(rate,outMask,AudioFormat.ENCODING_PCM_16BIT);
         player=new AudioTrack.Builder().setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()).setAudioFormat(outf).setBufferSizeInBytes(Math.max(outMin*2,8192)).setTransferMode(AudioTrack.MODE_STREAM).build();
         if(player.getState()!=AudioTrack.STATE_INITIALIZED)throw new IllegalStateException("AudioTrack non inizializzato");
-        engine.reset();engine.setManualOffset(offset);running.set(true);recorder.startRecording();player.play();
+        engine.reset();engine.setManualOffset(offset);delayBuffer=new short[BeatEngine.SAMPLE_RATE*2*2];delayWriteFrame=0;previousFxEnabled=false;running.set(true);recorder.startRecording();player.play();
         audioThread=new Thread(this::audioLoop,"BPM-Audio");audioThread.start();
         clockThread=new Thread(this::clockLoop,"BPM-Master-Clock");clockThread.start();
         broadcastStatus("Cattura attiva: riproduci musica");
@@ -69,12 +75,49 @@ public final class CaptureService extends Service {
                 if(n<=0){if(n==AudioRecord.ERROR_DEAD_OBJECT)break;continue;}
                 int usable=n-(n%2);
                 engine.process(pcm,usable,SystemClock.elapsedRealtime());
+                applyDelay(pcm,usable);
                 int p=0;while(p<usable&&running.get()){int w=player.write(pcm,p,usable-p,AudioTrack.WRITE_BLOCKING);if(w<=0)break;p+=w;}
                 long now=SystemClock.elapsedRealtime();
                 if(now-lastUiMs>=250){broadcastBpm();lastUiMs=now;}
             }
         }catch(Exception ignored){}finally{if(running.get())stopEngine();}
     }
+    /**
+     * Subtle quarter-note dub delay. BPM analysis runs on the untouched input above;
+     * this effect is applied only to the monitor/output copy.
+     */
+    private void applyDelay(short[] pcm,int samples){
+        if(delayBuffer==null)return;
+        if(fxEnabled&&!previousFxEnabled){java.util.Arrays.fill(delayBuffer,(short)0);delayWriteFrame=0;}
+        previousFxEnabled=fxEnabled;
+        float bpm=engine.getClockBpm();
+        if(bpm>0f){
+            int target=(int)Math.max(1,Math.min(BeatEngine.SAMPLE_RATE*0.9,BeatEngine.SAMPLE_RATE*60.0/bpm));
+            delayFrames+=(target-delayFrames)/8;
+        }
+        int frames=samples/2;
+        int capacity=delayBuffer.length/2;
+        int d=Math.min(capacity-1,Math.max(1,delayFrames));
+        for(int f=0;f<frames;f++){
+            int readFrame=delayWriteFrame-d;
+            if(readFrame<0)readFrame+=capacity;
+            int wi=delayWriteFrame*2,ri=readFrame*2;
+            short dryL=pcm[f*2],dryR=pcm[f*2+1];
+            short wetL=fxEnabled?delayBuffer[ri]:0;
+            short wetR=fxEnabled?delayBuffer[ri+1]:0;
+            if(fxEnabled){
+                delayBuffer[wi]=(short)clamp16(dryL+wetL*0.18f);
+                delayBuffer[wi+1]=(short)clamp16(dryR+wetR*0.18f);
+                pcm[f*2]=(short)clamp16(dryL*0.88f+wetL*0.12f);
+                pcm[f*2+1]=(short)clamp16(dryR*0.88f+wetR*0.12f);
+            }else{
+                delayBuffer[wi]=0;delayBuffer[wi+1]=0;
+            }
+            delayWriteFrame++;if(delayWriteFrame>=capacity)delayWriteFrame=0;
+        }
+    }
+    private int clamp16(float v){return (int)Math.max(Short.MIN_VALUE,Math.min(Short.MAX_VALUE,v));}
+
     private void clockLoop(){
         android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DEFAULT);
         while(running.get()){
