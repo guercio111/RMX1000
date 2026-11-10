@@ -154,7 +154,7 @@ public final class DspProcessor {
 
     public void setTempoTrim(float trimBpm) {
         if (!tempoLocked) setTempoLocked(true);
-        tempoTrimBpm = Math.max(-5f, Math.min(5f, trimBpm));
+        tempoTrimBpm = Math.max(-10f, Math.min(10f, trimBpm));
         float baseBpm = 2880000f / Math.max(1L, lockBaseBeatSamples);
         float bpm = Math.max(60f, Math.min(180f, baseBpm + tempoTrimBpm));
         beatSamples = Math.round(2880000f / bpm);
