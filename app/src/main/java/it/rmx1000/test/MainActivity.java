@@ -18,6 +18,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.graphics.Color;
 import android.util.TypedValue;
@@ -29,15 +30,21 @@ public class MainActivity extends Activity {
     private TextView status;
     private TextView tempoView;
     private Button clockLockButton;
+    private SeekBar clockFader;
+    private Button clockAutoResetButton, clockFaderResetButton;
+    private boolean clockUiUpdating = false;
     private boolean clockLocked = false;
+    private float clockTrimBpm = 0f;
     private boolean tempoReceiverRegistered;
     private final BroadcastReceiver tempoReceiver = new BroadcastReceiver() {
         @Override public void onReceive(Context context, Intent intent) {
             if (CaptureService.ACTION_TEMPO.equals(intent.getAction()) && tempoView != null) {
                 float bpm = intent.getFloatExtra(CaptureService.EXTRA_BPM, 0f);
                 clockLocked = intent.getBooleanExtra(CaptureService.EXTRA_CLOCK_LOCKED, false);
-                tempoView.setText(String.format(Locale.ROOT, "CLOCK  %.1f BPM  •  %s", bpm, clockLocked ? "LOCK" : "AUTO"));
+                clockTrimBpm = intent.getFloatExtra(CaptureService.EXTRA_CLOCK_TRIM_BPM, clockTrimBpm);
+                tempoView.setText(String.format(Locale.ROOT, "CLOCK  %.1f BPM  •  %s  •  TRIM %+.1f", bpm, clockLocked ? "LOCK" : "AUTO", clockTrimBpm));
                 updateClockLockButton();
+                updateClockFader();
             }
         }
     };
@@ -107,8 +114,46 @@ public class MainActivity extends Activity {
         faster.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
         faster.setOnClickListener(v -> adjustClockTempo(0.1f));
         clockControls.addView(faster, new LinearLayout.LayoutParams(dp(64), dp(32)));
-        root.addView(clockControls, new LinearLayout.LayoutParams(-1, dp(36)));
+        root.addView(clockControls, new LinearLayout.LayoutParams(-1, dp(34)));
         updateClockLockButton();
+
+        LinearLayout tempoFaderRow = new LinearLayout(this);
+        tempoFaderRow.setOrientation(LinearLayout.HORIZONTAL);
+        tempoFaderRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView faderLabel = new TextView(this);
+        faderLabel.setText("TEMPO");
+        faderLabel.setTextColor(Color.LTGRAY);
+        faderLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        tempoFaderRow.addView(faderLabel, new LinearLayout.LayoutParams(dp(52), dp(30)));
+        clockFader = new SeekBar(this);
+        clockFader.setMax(100);
+        clockFader.setProgress(50);
+        clockFader.setSplitTrack(false);
+        clockFader.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser && !clockUiUpdating) setClockTrim((progress - 50) * 0.1f);
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) { }
+            @Override public void onStopTrackingTouch(SeekBar seekBar) { }
+        });
+        tempoFaderRow.addView(clockFader, new LinearLayout.LayoutParams(0, dp(34), 1f));
+        root.addView(tempoFaderRow, new LinearLayout.LayoutParams(-1, dp(34)));
+
+        LinearLayout clockResetRow = new LinearLayout(this);
+        clockResetRow.setOrientation(LinearLayout.HORIZONTAL);
+        clockResetRow.setGravity(Gravity.CENTER);
+        clockAutoResetButton = makeButton("AUTO RESET", Color.rgb(70, 73, 80));
+        clockAutoResetButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        clockAutoResetButton.setOnClickListener(v -> resetClockAuto());
+        LinearLayout.LayoutParams resetParams = new LinearLayout.LayoutParams(dp(116), dp(30));
+        resetParams.setMargins(dp(4), 0, dp(4), 0);
+        clockResetRow.addView(clockAutoResetButton, resetParams);
+        clockFaderResetButton = makeButton("FADER RESET", Color.rgb(70, 73, 80));
+        clockFaderResetButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
+        clockFaderResetButton.setOnClickListener(v -> resetClockFader());
+        clockResetRow.addView(clockFaderResetButton, resetParams);
+        root.addView(clockResetRow, new LinearLayout.LayoutParams(-1, dp(32)));
+        updateClockFader();
 
         // Pioneer X-PAD FX: five touch zones, from 1/8 to 2/1 beat.
         LinearLayout xpadPanel = new LinearLayout(this);
@@ -238,7 +283,7 @@ public class MainActivity extends Activity {
         breakLabel.setGravity(Gravity.CENTER);
         breakLabel.setTypeface(null, android.graphics.Typeface.BOLD);
         groupLabels.addView(breakLabel, new LinearLayout.LayoutParams(0, -1, 1f));
-        transport.addView(sceneGrid, new LinearLayout.LayoutParams(-1, dp(190)));
+        transport.addView(sceneGrid, new LinearLayout.LayoutParams(-1, dp(172)));
         for (int column = 0; column < 2; column++) {
             LinearLayout buttonColumn = new LinearLayout(this);
             buttonColumn.setOrientation(LinearLayout.VERTICAL);
@@ -250,7 +295,7 @@ public class MainActivity extends Activity {
                 selector.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
                 selector.setOnClickListener(v -> selectSceneFx(selected));
                 sceneFxButtons[selected] = selector;
-                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, dp(36));
+                LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(-1, dp(32));
                 bp.leftMargin = dp(2);
                 bp.rightMargin = dp(2);
                 bp.topMargin = dp(2);
@@ -270,7 +315,7 @@ public class MainActivity extends Activity {
         LinearLayout fxControls = new LinearLayout(this);
         fxControls.setOrientation(LinearLayout.HORIZONTAL);
         fxControls.setGravity(Gravity.CENTER);
-        transport.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(126)));
+        transport.addView(fxControls, new LinearLayout.LayoutParams(-1, dp(112)));
 
         RotaryKnob levelKnob = new RotaryKnob(this, "SCENE FX", 0f, 1f, "%", value -> {
             fxLevel = value;
@@ -355,7 +400,7 @@ public class MainActivity extends Activity {
                 }
             });
             knob.setValue(isolate[band]);
-            knobs.addView(knob, new LinearLayout.LayoutParams(0, dp(168), 1f));
+            knobs.addView(knob, new LinearLayout.LayoutParams(0, dp(150), 1f));
         }
 
         content.addView(new LinearLayout(this), new LinearLayout.LayoutParams(0, 1));
@@ -407,9 +452,43 @@ public class MainActivity extends Activity {
 
     private void adjustClockTempo(float deltaBpm) {
         if (!captureStarted) return;
+        setClockTrim(clockTrimBpm + deltaBpm);
+    }
+
+    private void setClockTrim(float trimBpm) {
+        clockTrimBpm = Math.max(-5f, Math.min(5f, trimBpm));
+        updateClockFader();
+        if (!captureStarted) return;
         Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
-        i.putExtra(CaptureService.EXTRA_CLOCK_DELTA_BPM, deltaBpm);
+        i.putExtra(CaptureService.EXTRA_CLOCK_TRIM_BPM, clockTrimBpm);
         startService(i);
+    }
+
+    private void resetClockAuto() {
+        clockLocked = false;
+        clockTrimBpm = 0f;
+        updateClockLockButton();
+        updateClockFader();
+        if (!captureStarted) return;
+        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
+        i.putExtra(CaptureService.EXTRA_CLOCK_RESET_AUTO, true);
+        startService(i);
+    }
+
+    private void resetClockFader() {
+        clockTrimBpm = 0f;
+        updateClockFader();
+        if (!captureStarted) return;
+        Intent i = new Intent(this, CaptureService.class).setAction(CaptureService.ACTION_CLOCK_CONTROL);
+        i.putExtra(CaptureService.EXTRA_CLOCK_RESET_FADER, true);
+        startService(i);
+    }
+
+    private void updateClockFader() {
+        if (clockFader == null) return;
+        clockUiUpdating = true;
+        clockFader.setProgress(Math.max(0, Math.min(100, Math.round(50f + clockTrimBpm * 10f))));
+        clockUiUpdating = false;
     }
 
     private void updateClockLockButton() {
@@ -579,6 +658,7 @@ public class MainActivity extends Activity {
         service.putExtra(CaptureService.EXTRA_XPAD_TOUCH, false);
         service.putExtra(CaptureService.EXTRA_XPAD_DIVISION, xpadDivision);
         service.putExtra(CaptureService.EXTRA_CLOCK_LOCKED, clockLocked);
+        service.putExtra(CaptureService.EXTRA_CLOCK_TRIM_BPM, clockTrimBpm);
         try {
             startForegroundService(service);
             captureStarted = true;
